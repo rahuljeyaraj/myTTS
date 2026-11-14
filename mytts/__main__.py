@@ -90,8 +90,14 @@ def _cmd_say(args: argparse.Namespace) -> int:
 def _cmd_open(args: argparse.Namespace) -> int:
     from .ui.app import run
 
-    text = sys.stdin.read() if args.text == "-" else args.text
-    return run(text)
+    text = sys.stdin.read() if getattr(args, "text", None) == "-" else getattr(args, "text", None)
+    return run(text, tray=args.tray)
+
+
+def _cmd_quit(_args: argparse.Namespace) -> int:
+    from .ui.app import quit_running
+
+    return quit_running()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -101,11 +107,15 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(prog="mytts", description="Offline text-to-speech reader.")
     parser.add_argument("--version", action="version", version=f"mytts {__version__}")
+    parser.add_argument("--tray", action="store_true", help="start hidden in the notification area")
     sub = parser.add_subparsers(dest="command")
 
     p = sub.add_parser("open", help="open the reader window (the default), optionally reading TEXT")
     p.add_argument("text", nargs="?", help="text to read right away; '-' reads stdin")
     p.set_defaults(func=_cmd_open)
+
+    p = sub.add_parser("quit", help="close the running app")
+    p.set_defaults(func=_cmd_quit)
 
     p = sub.add_parser("download", help="download the offline voice model (~350 MB, once)")
     p.add_argument("--verify", action="store_true", help="re-check SHA-256 of installed files")
@@ -123,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
-        args = parser.parse_args(["open"])
+        args.func = _cmd_open
     try:
         return args.func(args)
     except (FileNotFoundError, models.DownloadError) as e:

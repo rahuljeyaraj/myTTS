@@ -51,28 +51,59 @@ Measured on the dev machine (default device: USB speakers through MME, which acc
 - Callback blocks are 320 frames (13 ms). Pause and stop take effect in the next block.
 - Jumping to a sentence that isn't cached takes about 0.8 s before audio starts; a speed change takes about 0.4 s.
 
-Known limits: if the output device disappears mid-sentence, playback recovers only on the next play or resume. The model is not downloaded from the window yet (M3); a missing model is reported in the status bar.
+Known limits: if the output device disappears mid-sentence, playback recovers only on the next play or resume.
 
-### M3: Hotkey, selection capture, tray and settings (next)
+### M3: Hotkey, selection capture, tray and settings (done)
 
-- Global hotkey: call `RegisterHotKey` on a dedicated thread with its own `GetMessageW` loop, using `MOD_NOREPEAT`, and emit a Qt signal. To re-register, use `PostThreadMessageW`. The default is Ctrl+Alt+Space, and it can be changed.
-- Capture the selection: wait up to about 1 s for the modifier keys to be released (`GetAsyncKeyState`), save the current text on the clipboard, record `GetClipboardSequenceNumber`, send Ctrl+C with `SendInput`, then poll up to about 600 ms for the sequence number to change.
-  - If it changed, read `CF_UNICODETEXT` and restore the previous text on the clipboard.
-  - If it did not change, nothing was selected: just show the window.
-  - Known limit: Windows (UIPI) blocks sending Ctrl+C to apps running as administrator.
-- Tray icon (`QSystemTrayIcon`) with Show, Read selection, Pause/Resume, Stop, Settings and Quit. Closing the window hides it to the tray.
-- `ReaderWindow.closeEvent` currently quits the app (M2). Change it to hide to the tray.
-- Single instance with `QLocalServer`: a second launch tells the running app to show its window.
-- Settings saved to `%APPDATA%\mytts\settings.json`: voice, speed, theme, font size, hotkey, always on top, start with Windows (HKCU `...\Run`), restore clipboard, and window geometry.
-- First run: if the model is missing, the window shows download progress using `models.ensure_all(progress, cancel)`.
+- `mytts/hotkey.py`: hotkeys are written like Qt shortcuts ("Ctrl+Alt+Space"). `parse()` and `to_text()` convert them; a hotkey needs Ctrl, Alt or Win. `HotkeyThread` calls `RegisterHotKey` (with `MOD_NOREPEAT`) on its own thread with a `GetMessageW` loop; `set()` posts a thread message to re-register, and `set(None)` releases the hotkey. `GlobalHotkey` is the QObject wrapper with `activated` and `status(hotkey, error)` signals. A taken hotkey reports "… is already used by another app."
+- `mytts/capture.py`: `capture_selection(restore)` returns the text, `""` if something without text was copied, or `None` if nothing was copied. The polling logic runs against a `ClipboardSystem` protocol, so tests use a fake.
+  - It waits up to 1 s for the modifiers to be released. Modifiers still held after that are released (key-up events) while Ctrl is down.
+  - It saves every memory-backed clipboard format, not only text: up to 64 MB in total. GDI-handle formats, the private range, and OLE's `DataObject` / `Ole Private Data` are skipped. CF_TEXT and CF_OEMTEXT are skipped when Unicode text exists, because Windows derives them again. Images survive through CF_DIB.
+  - It sends Ctrl+C, or Ctrl+Insert in terminals (conhost, Windows Terminal, mintty, PuTTY, ConEmu), because Ctrl+C there interrupts the running program when nothing is selected. A test confirmed this: an injected Ctrl+C sends SIGINT to a console program, and Ctrl+Insert does not. Ctrl+Insert copies the selection in conhost and in Windows Terminal (tested in both).
+  - It polls `GetClipboardSequenceNumber` for up to 600 ms, then reads `CF_UNICODETEXT` and restores the saved formats. The restore also sets `CanIncludeInClipboardHistory=0` and `CanUploadToCloudClipboard=0`, so it doesn't add a duplicate to Win+V history.
+  - The clipboard owner is a message-only window, because SetClipboardData with a NULL owner is documented to fail. Restored data stays readable by other processes after that window is destroyed (tested).
+- `mytts/settings.py`: `Settings` dataclass saved to `%APPDATA%\mytts\settings.json` with an atomic write. A damaged file, an unknown key or a value of the wrong type falls back to the default for that field. Start with Windows is not stored there: `mytts/autostart.py` reads and writes the HKCU Run value directly, so the two can't disagree. Outside an installed package, the Run command is `pythonw -c "…sys.path.insert(0, <checkout>)…" --tray`, because Run entries have no working directory. `refresh()` at startup rewrites it if the checkout or venv moved.
+- `mytts/ui/app.py`: `App` owns the window, tray, hotkey, settings dialog and model download.
+  - Captures run on a worker thread, one at a time.
+  - Closing the window pauses and hides it to the tray. The first time, a tray balloon explains this.
+  - Settings are saved 600 ms after a change and again on quit.
+  - On Windows sign-out (`commitDataRequest`), the window stops hiding on close, so it never blocks sign-out.
+  - If the model is missing, the window is shown even with `--tray`, and the download needs a click (354 MB).
+- `mytts/ui/tray.py`: menu Show reader, Read selection (with the hotkey in the shortcut column), Play/Pause/Resume, Stop, Settings…, Quit, themed like the reader. Left click shows the reader; middle click plays or pauses. Read selection from the tray first gives the focus back to the app the user was in: `native.previous_app_window()` walks the Z-order and skips our windows, the shell, tool windows and cloaked windows. It then waits 150 ms before copying.
+- `mytts/ui/instance.py`: a named mutex (`Local\mytts-<user hash>`) decides which process is first. That process listens with `QLocalServer` (user-only access). A later launch sends one JSON line (`show`, `open` + text, `tray`, `quit`) and waits for an `ok` reply.
+- `mytts/ui/settings_dialog.py`: hotkey recorder (the global hotkey is released while recording, so the keys reach the dialog), plus switches for restore clipboard, keep on top and start with Windows. `Switch` is a painted toggle.
+- `mytts/ui/native.py`: `bring_to_front()` uses `AttachThreadInput` when `SetForegroundWindow` alone is refused. `enabled()` is false under the offscreen test platform, so tests never touch real windows.
+- `mytts/ui/icon.py`: the app icon, drawn with QPainter (sound-wave bars on an amber tile).
+- Reader window: settings button, model-download strip (`ModelNotice`), `preferences_changed` and `closed_to_tray` signals. A saved voice that no longer exists falls back to the default.
+- CLI: `--tray` starts hidden. `python -m mytts quit` closes the running copy.
+- `pyproject.toml` now lists the `mytts.ui` package as well.
+- Tests: 75 in total. They cover settings, hotkey parsing and registration conflicts, capture logic, single instance (the client runs in a subprocess, as a real second launch does), and app flows (capture, close to tray, tray menu, persistence, download, settings dialog, autostart Run key).
 
-### M4: Install and polish
+Measured on the dev machine:
+
+- Capturing a selection from another app took 35 ms. From hotkey to text in the reader took 0.18 s, including the first show of the window; speech started at 0.57 s.
+- With nothing selected, the window appears after the 600 ms copy timeout.
+- Tray Read selection: 0.19 s to text, including the 150 ms focus settle.
+- A second launch that hands over its request and exits takes 0.42 s, mostly Python and Qt startup.
+- The model download reports progress every 100 ms. Cancel keeps the `.part` file for resuming.
+
+Known limits:
+
+- Apps running as administrator can't be read (UIPI).
+- The copied selection goes into Win+V history, because the source app writes it.
+- Clipboard formats that are GDI handles (metafiles, palettes) are not restored.
+- The VS Code integrated terminal can't be told apart from the editor (both are `Chrome_WidgetWin_1`), so pressing the hotkey there with nothing selected sends Ctrl+C.
+- An app that is not responding when the clipboard is saved (delayed rendering) blocks the capture thread.
+
+### M4: Install and polish (next)
 
 - `install.ps1`: creates the venv, installs dependencies, downloads the model, and adds a Start Menu shortcut (`pythonw -m mytts`) with an icon. It can also add the app to Windows startup. Add `uninstall.ps1`.
-- Draw the app icon with QPainter and export it to `.ico` for shortcuts.
+- Export the QPainter icon (`mytts/ui/icon.py`) to `.ico` for shortcuts. `python -m mytts quit` lets `uninstall.ps1` close a running copy first.
 - README: screenshots and usage. Tag `v0.1.0`.
 
 ## Dev environment notes
 
 - Use `py -3.10 -m venv .venv`. kokoro-onnx requires Python below 3.14, and the default `python` on the dev machine belongs to PlatformIO, so don't use it.
 - Run the tests with `.venv\Scripts\python -m pytest -q`.
+- Processes started from the Claude Code shell ignore Ctrl+C (Windows passes that flag to child processes). To test Ctrl+C in a console program, call `SetConsoleCtrlHandler(None, False)` in it first.
+- `conhost.exe <command>` opens a classic console window even when Windows Terminal is the default terminal; `wt.exe -w new <command>` opens a separate Windows Terminal window.

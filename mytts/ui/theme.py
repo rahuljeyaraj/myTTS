@@ -71,10 +71,12 @@ _GLYPHS = {
     "pinned": "",
     "theme": "",
     "chevron": "",
+    "settings": "",
 }
 _FALLBACK = {
     "prev": "⏮", "play": "▶", "pause": "⏸", "stop": "■", "next": "⏭",
     "pin": "📌", "pinned": "📌", "theme": "◐", "chevron": "▾",
+    "settings": "⚙",
 }
 
 _TEXT_FONTS = ("Segoe UI Variable Text", "Segoe UI")
@@ -162,6 +164,38 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
 
 QToolTip {{ color: {t.text}; background: {t.bg}; border: 1px solid {t.border}; padding: 4px 6px; }}
+
+QDialog#settings {{ background: {t.bg}; }}
+QLabel#heading {{ color: {t.text}; }}
+QLabel#hint {{ color: {t.muted}; }}
+QLabel#hint[error="true"] {{ color: {t.accent}; }}
+QPushButton {{
+    color: {t.text}; background: transparent; border: 1px solid {t.border};
+    border-radius: 6px; padding: 5px 14px; min-height: 20px;
+}}
+QPushButton:hover {{ background: {t.control}; }}
+QPushButton:pressed {{ background: {t.border}; }}
+QPushButton:disabled {{ color: {t.muted}; }}
+QPushButton#primary {{ color: {t.bg}; background: {t.accent}; border-color: {t.accent}; }}
+QPushButton#primary:hover {{ background: {t.text}; border-color: {t.text}; }}
+QPushButton#hotkey {{ min-width: 140px; }}
+QPushButton#hotkey[recording="true"] {{ border-color: {t.accent}; color: {t.accent}; }}
+
+QFrame#notice {{ background: {t.hover}; border-bottom: 1px solid {t.border}; }}
+QFrame#notice QLabel {{ color: {t.text}; }}
+QProgressBar {{ background: {t.border}; border: none; border-radius: 2px; max-height: 4px; }}
+QProgressBar::chunk {{ background: {t.accent}; border-radius: 2px; }}
+""" + menu_stylesheet(t)
+
+
+def menu_stylesheet(t: Theme) -> str:
+    """Also used on its own for the tray menu, which is a separate top-level window."""
+    return f"""
+QMenu {{ background: {t.bg}; color: {t.text}; border: 1px solid {t.border}; padding: 4px; }}
+QMenu::item {{ padding: 6px 28px 6px 14px; border-radius: 4px; }}
+QMenu::item:selected {{ background: {t.control}; }}
+QMenu::item:disabled {{ color: {t.muted}; }}
+QMenu::separator {{ height: 1px; background: {t.border}; margin: 4px 8px; }}
 """
 
 

@@ -23,7 +23,7 @@ dev = ["pytest>=8"]
 mytts = "mytts.__main__:main"
 
 [tool.setuptools]
-packages = ["mytts"]
+packages = ["mytts", "mytts.ui"]
 
 [tool.setuptools.dynamic]
 version = { attr = "mytts.__version__" }

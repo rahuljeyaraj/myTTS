@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
+    QPushButton,
     QSlider,
     QTextEdit,
     QToolButton,
@@ -30,9 +32,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..engine import Voice
+from ..engine import DEFAULT_VOICE, Voice
 from ..player import MAX_SPEED, MIN_SPEED, Player, State
 from ..text import Segment, normalize, segment
+from . import native
 from . import theme as themes
 
 LINE_HEIGHT = 160  # percent
@@ -301,11 +304,77 @@ def _zoom_key(e) -> int:
     return 0
 
 
+class ModelNotice(QFrame):
+    """A strip above the text that offers the one-time voice model download."""
+
+    start_requested = Signal()
+    cancel_requested = Signal()
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("notice")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(PAD_X // 2 + 4, 10, 14, 10)
+        row.setSpacing(14)
+        self.label = QLabel()
+        self.label.setWordWrap(True)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 1000)
+        self.progress.setTextVisible(False)
+        self.progress.setFixedWidth(150)
+        self.button = QPushButton()
+        self.button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.button.clicked.connect(self._clicked)
+        row.addWidget(self.label, 1)
+        row.addWidget(self.progress)
+        row.addWidget(self.button)
+        self.busy = False
+        self.hide()
+
+    def offer(self, size_bytes: int, error: str | None = None) -> None:
+        self.busy = False
+        mb = f"{size_bytes / 1e6:.0f} MB"
+        if error:
+            self.label.setText(f"{error} The download resumes where it stopped.")
+        else:
+            self.label.setText(f"mytts needs its offline voices ({mb}, downloaded once). "
+                               "After that, nothing you read leaves this computer.")
+        self.progress.hide()
+        self._set_button("Retry" if error else "Download", primary=True)
+        self.show()
+
+    def downloading(self, done: int, total: int) -> None:
+        self.busy = True
+        frac = done / total if total else 0.0
+        self.label.setText(f"Downloading voices…  {frac:.0%}  ·  {done / 1e6:.0f} of {total / 1e6:.0f} MB")
+        self.progress.setValue(round(frac * 1000))
+        self.progress.show()
+        self._set_button("Cancel", primary=False)
+        self.show()
+
+    def _set_button(self, text: str, primary: bool) -> None:
+        self.button.setText(text)
+        name = "primary" if primary else ""
+        if self.button.objectName() != name:
+            self.button.setObjectName(name)
+            self.button.style().unpolish(self.button)
+            self.button.style().polish(self.button)
+
+    def _clicked(self) -> None:
+        (self.cancel_requested if self.busy else self.start_requested).emit()
+
+
 class ReaderWindow(QWidget):
     """The text, a transport bar, voice and speed controls."""
 
+    settings_requested = Signal()
+    preferences_changed = Signal()  # voice, speed, theme, text size or keep-on-top changed
+    closed_to_tray = Signal()
+
     def __init__(self, player: Player, theme: str = "dark", font_size: float = FONT_PT):
         super().__init__()
+        self.hide_on_close = False  # the app sets this when a tray icon can bring the window back
+        self._model_missing = False
         self.player = player
         self.setObjectName("reader")
         self.setWindowTitle("mytts")
@@ -362,7 +431,7 @@ class ReaderWindow(QWidget):
         self.speed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.speed_label.mouseDoubleClickEvent = lambda _e: self.speed.setValue(round(1 / SPEED_STEP))
         self._speed_timer = QTimer(self, singleShot=True, interval=SPEED_DEBOUNCE_MS)
-        self._speed_timer.timeout.connect(lambda: self.player.set_speed(self.speed_value()))
+        self._speed_timer.timeout.connect(self._apply_speed)
         self.speed.valueChanged.connect(self._on_speed_moved)
         self.speed.setValue(round(player.speed / SPEED_STEP))
         self._on_speed_moved()
@@ -376,12 +445,17 @@ class ReaderWindow(QWidget):
         self.pin_btn = self._button("pin", "Keep on top", None)
         self.pin_btn.setCheckable(True)
         self.pin_btn.toggled.connect(self.set_always_on_top)
+        self.settings_btn = self._button("settings", "Settings", self.settings_requested)
         row.addWidget(self.theme_btn)
         row.addWidget(self.pin_btn)
+        row.addWidget(self.settings_btn)
+
+        self.notice = ModelNotice()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+        layout.addWidget(self.notice)
         layout.addWidget(self.view, 1)
         layout.addWidget(bar)
 
@@ -422,12 +496,36 @@ class ReaderWindow(QWidget):
         if self.view.count:
             self.player.toggle()
 
+    def bring_to_front(self) -> None:
+        """Show, un-minimize and activate, also when another app has the focus."""
+        if self.isMinimized():
+            self.showNormal()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        if native.enabled():
+            native.bring_to_front(int(self.winId()))
+
+    def offer_download(self, size_bytes: int, error: str | None = None) -> None:
+        self._model_missing = True
+        self.notice.offer(size_bytes, error)
+        self._update_status()
+
+    def show_download_progress(self, done: int, total: int) -> None:
+        self.notice.downloading(done, total)
+
+    def model_installed(self) -> None:
+        self._model_missing = False
+        self.notice.hide()
+        self._update_status()
+
     def speed_value(self) -> float:
         return round(self.speed.value() * SPEED_STEP, 2)
 
     def set_font_size(self, size: float) -> None:
         self._font_size = max(MIN_FONT_PT, min(MAX_FONT_PT, size))
         self.view.setFont(themes.reading_font(self._font_size))
+        self.preferences_changed.emit()
 
     def apply_theme(self, name: str) -> None:
         self._theme = themes.THEMES.get(name, themes.DARK)
@@ -439,6 +537,7 @@ class ReaderWindow(QWidget):
         pal.setColor(QPalette.ColorRole.PlaceholderText, QColor(t.muted))
         self.view.setPalette(pal)
         themes.style_title_bar(int(self.winId()), t)
+        self.preferences_changed.emit()
 
     def cycle_theme(self) -> None:
         names = list(themes.THEMES)
@@ -460,6 +559,11 @@ class ReaderWindow(QWidget):
             self.pin_btn.setChecked(on)
         self.pin_btn.setText(self._glyphs["pinned" if on else "pin"])
         self.pin_btn.setToolTip("Stop keeping on top" if on else "Keep on top")
+        self.preferences_changed.emit()
+
+    @property
+    def always_on_top(self) -> bool:
+        return self.pin_btn.isChecked()
 
     def show_error(self, message: str) -> None:
         self._error_until = time.monotonic() + 8
@@ -490,15 +594,25 @@ class ReaderWindow(QWidget):
             language = v.language
             box.addItem(v.label, v.id)
         i = box.findData(self.player.voice)
-        box.setCurrentIndex(max(0, i))
+        if i < 0:  # e.g. a saved voice this model doesn't have
+            i = max(0, box.findData(DEFAULT_VOICE))
+            if box.itemData(i):
+                self.player.set_voice(box.itemData(i))
+        box.setCurrentIndex(i)
         box.setEnabled(True)
         box.blockSignals(False)
         self._update_status()
+        self.preferences_changed.emit()  # saves the fallback voice, if one was chosen
 
     def _on_voice_chosen(self, index: int) -> None:
         voice_id = self.voice_box.itemData(index)
         if voice_id:
             self.player.set_voice(voice_id)
+            self.preferences_changed.emit()
+
+    def _apply_speed(self) -> None:
+        self.player.set_speed(self.speed_value())
+        self.preferences_changed.emit()
 
     def _on_speed_moved(self) -> None:
         self.speed_label.setText(f"{self.speed_value():.2f}×")
@@ -530,7 +644,9 @@ class ReaderWindow(QWidget):
         if self.player.engine_error:
             self._show_status(self.player.engine_error, error=True)
             return
-        if not self.player.voices and (state == State.LOADING or not n):
+        if self._model_missing:
+            text = "Voices not installed"
+        elif not self.player.voices and (state == State.LOADING or not n):
             text = "Loading voices…"
         elif state == State.LOADING and not self._loading_timer.isActive():
             text = "Preparing speech…"
@@ -547,6 +663,14 @@ class ReaderWindow(QWidget):
             self.status.setProperty("error", error)
             self.status.style().unpolish(self.status)
             self.status.style().polish(self.status)
+
+    def closeEvent(self, e) -> None:  # noqa: N802
+        if self.hide_on_close:
+            e.ignore()
+            self.hide()
+            self.closed_to_tray.emit()
+        else:
+            super().closeEvent(e)
 
     def keyPressEvent(self, e) -> None:  # noqa: N802
         key, mods = e.key(), e.modifiers()
