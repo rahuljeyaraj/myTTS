@@ -95,11 +95,42 @@ Known limits:
 - The VS Code integrated terminal can't be told apart from the editor (both are `Chrome_WidgetWin_1`), so pressing the hotkey there with nothing selected sends Ctrl+C.
 - An app that is not responding when the clipboard is saved (delayed rendering) blocks the capture thread.
 
-### M4: Install and polish (next)
+### M4: Install and polish (done, tagged `v0.1.0`)
 
-- `install.ps1`: creates the venv, installs dependencies, downloads the model, and adds a Start Menu shortcut (`pythonw -m mytts`) with an icon. It can also add the app to Windows startup. Add `uninstall.ps1`.
-- Export the QPainter icon (`mytts/ui/icon.py`) to `.ico` for shortcuts. `python -m mytts quit` lets `uninstall.ps1` close a running copy first.
-- README: screenshots and usage. Tag `v0.1.0`.
+- `install.ps1` installs for the current user, with no administrator rights. It runs again to update an existing install.
+  - The install lives in `%LOCALAPPDATA%\mytts`, next to `models`: `venv`, `mytts.ico` and a copy of `uninstall.ps1`. mytts is installed into the venv as a package (not editable), so edits in a source checkout can't break the installed copy.
+  - Python: it uses the newest 64-bit, not free-threaded CPython 3.10 to 3.13 registered under PEP 514 (`HK{CU,LM}\Software\Python\PythonCore\*\InstallPath`). It looks on PATH only if none qualifies, because on the dev machine PATH has PlatformIO's Python first. `-Python <exe>` overrides the choice. An existing venv is reused while it still works.
+  - Steps: it closes a running copy of the install, upgrades pip, installs `requirements.txt`, then installs mytts with `--no-deps --force-reinstall` (so unchanged version numbers still update). It installs from a temporary copy of `mytts\`, `pyproject.toml`, `README.md` and `LICENSE`. pip builds in place, so installing the source folder directly would leave `build\` and `*.egg-info` there, and setuptools packages leftover files from `build\lib` into later wheels. Then it runs `mytts download` (a failure only warns), writes the icon, creates the Start menu shortcut and the Settings > Apps entry, and launches the shortcut.
+  - The shortcut runs `venv\Scripts\pythonw.exe -m mytts` with the working directory set to the install folder. It carries the AppUserModelID `mytts.app` (`native.APP_ID`), which the app also sets for its process before any window. WScript.Shell can't set that ID, so the script uses inline C# (`IShellLinkW` + `IPropertyStore`). Tested: without a shortcut that has this ID, the tray notification is labelled "Python"; with it, "mytts" with the app icon. Pinning to the taskbar should relaunch through the shortcut for the same reason, but that was not tried by hand.
+  - Settings > Apps: `HKCU\...\Uninstall\mytts` with the version, icon, size, and `NoModify`/`NoRepair`. Its UninstallString runs the copied `uninstall.ps1`, so uninstalling doesn't need the source folder.
+  - `-Startup` writes the Run entry through `autostart.set_enabled(True)`, so it matches what the app writes. Other options: `-NoModel` and `-NoLaunch`. From an elevated window it warns and doesn't launch (the app would run elevated).
+- `uninstall.ps1` first closes the installed copy: `mytts quit`, then it waits for processes whose path is in the venv and kills them after 10 s. It then removes the Run entry (only if it points into the install), the shortcut, the Apps entry, the venv, the icon and the voice model. Settings stay unless `-RemoveSettings` is given; `-KeepModel` keeps the model. It changes the process's current directory to `%TEMP%` first, because Windows can't delete a folder that is a process's current directory.
+- A venv's `pythonw.exe` is a launcher: the app runs in a child, the base `Python310\pythonw.exe`. Waiting on the launcher is enough, because it exits with its child.
+- `mytts quit` now waits until the running copy has released its mutex (`instance.is_running()` / `wait_until_gone()`, using `OpenMutexW`), up to 10 s.
+- `mytts/ui/icon.py` draws on a `QImage`, so no `QGuiApplication` is needed. `ico_bytes()` / `save_ico()` write a .ico with 9 sizes: 32-bit BMP with an AND mask below 256 px, PNG at 256 px. Checked with Win32 `LoadImage` at every size. .NET's `System.Drawing.Icon` skips PNG entries, so don't use it to check.
+- `tools/screenshots.py` regenerates `docs/*.png`. It drives the real app on the desktop with a silent stream whose callback is pumped by hand, so the reader stays mid-sentence. It captures the DWM extended frame bounds with corner rounding turned off.
+- `pyproject.toml`: the license is now the SPDX string `"MIT"` (setuptools>=77); the old table form printed deprecation warnings during install.
+- README: install, update and uninstall instructions, and screenshots. Version `0.1.0`.
+- Tests: 85 in total. New tests cover the .ico layout, AND mask and pixel round-trip; `is_running`; `quit` waiting for a server process; the scripts being ASCII and parsing in Windows PowerShell; and the installer's app ID and Python range matching the code. `test_register_conflict_and_release` used to fail about 1 run in 10, because releasing a hotkey happens on its own thread and reports nothing. The test now retries until the release has taken effect (60 of 60 runs passed).
+
+Measured on the dev machine:
+
+- First install with dependencies in pip's cache and the model already present: 70 to 76 s. Updating with the app running: 10 s, closing and relaunching included. The install is 757 MB, of which the model is 354 MB.
+- The window is visible 0.64 s after the Start menu shortcut is clicked.
+- `mytts quit` returns after 0.40 s, and the processes are gone 30 ms later. Uninstalling with the app running takes 4.5 s.
+- Install, update, `-Startup`, uninstall with `-KeepModel`, and the default uninstall were all run for real. The default uninstall ran against sandboxed `LOCALAPPDATA`/`APPDATA` so the real model was kept.
+
+Known limits:
+
+- Installing needs internet access and an installed Python 3.10 to 3.13; nothing is bundled. Updates are manual (`git pull`, then run `install.ps1` again).
+- The installed copy and a source checkout share the settings file and the single-instance lock, so only one of them runs at a time.
+
+## After v0.1.0
+
+No milestone is planned yet. Candidates:
+
+- A self-contained build (PyInstaller or Nuitka) so Python isn't needed.
+- Recovering when the output device disappears mid-sentence (M2 limit).
 
 ## Dev environment notes
 
@@ -107,3 +138,6 @@ Known limits:
 - Run the tests with `.venv\Scripts\python -m pytest -q`.
 - Processes started from the Claude Code shell ignore Ctrl+C (Windows passes that flag to child processes). To test Ctrl+C in a console program, call `SetConsoleCtrlHandler(None, False)` in it first.
 - `conhost.exe <command>` opens a classic console window even when Windows Terminal is the default terminal; `wt.exe -w new <command>` opens a separate Windows Terminal window.
+- `QTest.qWait` keeps the GIL while it waits, which starves Python worker threads: with the real engine, `ready` never arrived within 15 s. With `QEventLoop` + `QTimer.singleShot`, it arrives in 1.2 s. Tests with fake engines are not affected; use the event loop when a real worker thread must run (see `tools/screenshots.py`).
+- Windows PowerShell 5.1 quirks the install scripts work around: it reads a script without a BOM in the ANSI code page (keep the scripts ASCII; a test checks this); it strips `"` inside arguments passed to native programs (use `'` in `python -c` code); and it passes `$null` to a P/Invoke string parameter as `""` (use `[NullString]::Value`).
+- To test the install scripts without touching real data, run them in a child process with `LOCALAPPDATA` and `APPDATA` pointed at scratch folders.

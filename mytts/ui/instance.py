@@ -19,6 +19,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 ERROR_ALREADY_EXISTS = 183
+SYNCHRONIZE = 0x00100000
 MAX_MESSAGE = 16 << 20  # bytes
 
 
@@ -104,6 +105,30 @@ class SingleInstance(QObject):
     def _drop(self, sock: QLocalSocket) -> None:
         self._buffers.pop(sock, None)
         sock.deleteLater()
+
+
+def is_running(name: str | None = None) -> bool:
+    """True while some process holds the mutex, without taking it (Windows only)."""
+    if sys.platform != "win32":
+        return False
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.OpenMutexW.restype = ctypes.c_void_p
+    k.OpenMutexW.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_wchar_p]
+    k.CloseHandle.argtypes = [ctypes.c_void_p]
+    h = k.OpenMutexW(SYNCHRONIZE, False, f"Local\\{name or default_name()}")
+    if h:
+        k.CloseHandle(h)
+    return bool(h)
+
+
+def wait_until_gone(name: str | None = None, timeout: float = 10.0) -> bool:
+    """Wait for the running copy to release the mutex (it does that as it exits)."""
+    deadline = time.monotonic() + timeout
+    while is_running(name):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+    return True
 
 
 def send(message: dict, name: str | None = None, timeout: float = 3.0) -> bool:

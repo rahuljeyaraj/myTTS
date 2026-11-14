@@ -17,6 +17,17 @@ WS_EX_TOOLWINDOW, WS_EX_NOACTIVATE = 0x80, 0x08000000
 SW_RESTORE = 9
 DWMWA_CLOAKED = 14
 
+# AppUserModelID. The Start menu shortcut from install.ps1 carries the same ID,
+# so Windows groups the window under that shortcut, a taskbar pin starts mytts
+# (not bare pythonw.exe), and tray notifications say "mytts" instead of "Python".
+APP_ID = "mytts.app"
+
+
+def set_app_id(app_id: str = APP_ID) -> None:
+    """Call before the first window is created."""
+    if sys.platform == "win32":
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ctypes.c_wchar_p(app_id))
+
 
 def _user32():
     u = ctypes.WinDLL("user32", use_last_error=True)

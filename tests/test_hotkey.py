@@ -1,5 +1,6 @@
 import sys
 import threading
+import time
 
 import pytest
 from PySide6.QtCore import QEvent, Qt
@@ -85,10 +86,17 @@ def test_register_conflict_and_release():
         assert events[2].wait(2)
         assert "already used" in results[2][-1][1]
 
-        events[2].clear()
         first.set(None)  # suspended (as while recording a new hotkey)
-        second.set(combo)
-        assert events[2].wait(2) and results[2][-1] == (combo, None)
+        # The release happens on first's thread and reports nothing, so retry until it has.
+        deadline = time.monotonic() + 2
+        while True:
+            events[2].clear()
+            second.set(combo)
+            assert events[2].wait(2)
+            if results[2][-1] == (combo, None) or time.monotonic() > deadline:
+                break
+            time.sleep(0.02)
+        assert results[2][-1] == (combo, None)
     finally:
         first.stop()
         second.stop()

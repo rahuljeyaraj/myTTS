@@ -23,7 +23,7 @@ from ..settings import Settings
 from . import native
 from . import theme as themes
 from .icon import app_icon
-from .instance import SingleInstance, send
+from .instance import SingleInstance, is_running, send, wait_until_gone
 from .reader import ReaderWindow
 from .settings_dialog import SettingsDialog
 from .tray import Tray
@@ -332,18 +332,25 @@ class App(QObject):
         self.window.offer_download(sum(f.size for f in todo), error)
 
 
-def quit_running() -> int:
-    """Ask the running copy to exit (for scripts such as an uninstaller)."""
+def quit_running(timeout: float = 10.0, name: str | None = None) -> int:
+    """Ask the running copy to exit and wait until it has (for scripts such as an uninstaller)."""
     from PySide6.QtCore import QCoreApplication
 
     _app = QCoreApplication.instance() or QCoreApplication(sys.argv[:1])
-    if SingleInstance().acquire():
+    if not is_running(name):
         print("mytts is not running.")
         return 1
-    return 0 if send({"cmd": "quit"}) else 1
+    if not send({"cmd": "quit"}, name):
+        print("mytts is running but did not respond.", file=sys.stderr)
+        return 1
+    if not wait_until_gone(name, timeout):
+        print(f"mytts did not exit within {timeout:.0f} s.", file=sys.stderr)
+        return 1
+    return 0
 
 
 def run(text: str | None = None, tray: bool = False) -> int:
+    native.set_app_id()  # before the first window, so the taskbar groups it under the shortcut
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("mytts")
     app.setApplicationVersion(__version__)
