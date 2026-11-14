@@ -1,0 +1,4 @@
+kokoro-onnx>=0.6.1
+numpy>=2.0
+sounddevice>=0.5
+PySide6-Essentials>=6.8
