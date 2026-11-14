@@ -2,7 +2,7 @@
 
 An offline, minimalist read-aloud app for Windows. Select text in any window, press a hotkey, and a small reader window opens and starts speaking. The sentence being read is highlighted, and clicking any sentence jumps there.
 
-> **Status:** early development. The offline voice engine and command line work today; the reader window, hotkey and tray icon are in progress. See [ROADMAP.md](ROADMAP.md).
+> **Status:** early development. The voice engine, command line and reader window work. The global hotkey, tray icon and installer are next. See [ROADMAP.md](ROADMAP.md).
 
 ## Voices
 
@@ -21,6 +21,25 @@ py -3.10 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python -m mytts download
 ```
+
+## Reader window
+
+```powershell
+.venv\Scripts\pythonw -m mytts                         # open the reader window
+.venv\Scripts\python -m mytts open "Text to read now."  # open it and start reading
+```
+
+Paste text with **Ctrl+V** and it is read from the start. The sentence being spoken is highlighted; click any sentence to continue from there.
+
+| Key | Action |
+| --- | --- |
+| Space | Play / pause |
+| Esc | Stop |
+| Left / Right | Previous / next sentence |
+| Ctrl+V | Paste and read |
+| Ctrl+= / Ctrl+- / Ctrl+0, Ctrl+wheel | Text size |
+
+The bottom bar has the voice list, a speed slider (0.5× to 2×; double-click the value to reset), a dark/sepia theme switch and a pin button that keeps the window on top.
 
 ## Command line
 

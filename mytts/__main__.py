@@ -1,7 +1,4 @@
-"""Command line: `python -m mytts <command>`.
-
-Milestone 1 provides the engine commands; the reader window arrives in milestone 2.
-"""
+"""Command line: `python -m mytts [command]`. Without a command, the reader window opens."""
 
 from __future__ import annotations
 
@@ -90,6 +87,13 @@ def _cmd_say(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_open(args: argparse.Namespace) -> int:
+    from .ui.app import run
+
+    text = sys.stdin.read() if args.text == "-" else args.text
+    return run(text)
+
+
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -98,6 +102,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mytts", description="Offline text-to-speech reader.")
     parser.add_argument("--version", action="version", version=f"mytts {__version__}")
     sub = parser.add_subparsers(dest="command")
+
+    p = sub.add_parser("open", help="open the reader window (the default), optionally reading TEXT")
+    p.add_argument("text", nargs="?", help="text to read right away; '-' reads stdin")
+    p.set_defaults(func=_cmd_open)
 
     p = sub.add_parser("download", help="download the offline voice model (~350 MB, once)")
     p.add_argument("--verify", action="store_true", help="re-check SHA-256 of installed files")
@@ -115,8 +123,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
-        parser.print_help()
-        return 0
+        args = parser.parse_args(["open"])
     try:
         return args.func(args)
     except (FileNotFoundError, models.DownloadError) as e:
