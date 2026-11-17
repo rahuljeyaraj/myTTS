@@ -15,6 +15,15 @@ from .engine import DEFAULT_VOICE
 from .paths import config_dir
 
 DEFAULT_HOTKEY = "Ctrl+Alt+Space"
+DEFAULT_NEXT_HOTKEY = "Ctrl+Alt+Right"
+DEFAULT_PREV_HOTKEY = "Ctrl+Alt+Left"
+
+# Global hotkeys: action name -> (Settings field, label shown to the user).
+HOTKEYS = {
+    "read": ("hotkey", "Read selection"),
+    "next": ("next_hotkey", "Next sentence"),
+    "prev": ("prev_hotkey", "Previous sentence"),
+}
 
 
 def settings_path() -> Path:
@@ -27,7 +36,9 @@ class Settings:
     speed: float = 1.0
     theme: str = "dark"
     font_size: float = 13.0
-    hotkey: str = DEFAULT_HOTKEY
+    hotkey: str = DEFAULT_HOTKEY  # read selection; pressed while reading, it pauses
+    next_hotkey: str = DEFAULT_NEXT_HOTKEY
+    prev_hotkey: str = DEFAULT_PREV_HOTKEY
     always_on_top: bool = False
     restore_clipboard: bool = True
     geometry: str = ""  # base64 of QWidget.saveGeometry()
@@ -60,6 +71,9 @@ class Settings:
             if ok:
                 setattr(s, f.name, value)
         return s
+
+    def hotkeys(self) -> dict[str, str]:
+        return {name: getattr(self, field) for name, (field, _label) in HOTKEYS.items()}
 
     def save(self, path: Path | None = None) -> None:
         """Write atomically, so a crash mid-write cannot leave a half-written file."""

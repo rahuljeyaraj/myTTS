@@ -19,7 +19,8 @@ from .. import __version__, autostart, models
 from ..capture import capture_selection
 from ..hotkey import GlobalHotkey
 from ..player import Player, State
-from ..settings import Settings
+from ..text import normalize
+from ..settings import HOTKEYS, Settings
 from . import native
 from . import theme as themes
 from .icon import app_icon
@@ -59,6 +60,7 @@ class App(QObject):
         self._missing = missing
         self._ensure = ensure
         self._capturing = False
+        self._resume_after_capture = False  # the read hotkey was pressed while paused
         self._cancel_download: threading.Event | None = None
         self._quitting = False
 
@@ -74,7 +76,8 @@ class App(QObject):
             use_tray = Tray.available()
         self.tray = Tray(self) if use_tray else None
         self.window.hide_on_close = self.tray is not None
-        self.hotkey = GlobalHotkey(self) if use_hotkey else None
+        labels = {name: label for name, (_field, label) in HOTKEYS.items()}
+        self.hotkey = GlobalHotkey(self, labels) if use_hotkey else None
         self.dialog: SettingsDialog | None = None
 
         self._save_timer = QTimer(self, singleShot=True, interval=SAVE_DELAY_MS)
@@ -91,7 +94,7 @@ class App(QObject):
         self._download_progress.connect(w.show_download_progress, Qt.ConnectionType.QueuedConnection)
         self._download_done.connect(self._on_download_done, Qt.ConnectionType.QueuedConnection)
         if self.hotkey is not None:
-            self.hotkey.activated.connect(self.read_selection)
+            self.hotkey.activated.connect(self.hotkey_pressed)
             self.hotkey.status.connect(self._hotkey_status)
         if self.tray is not None:
             t = self.tray
@@ -108,7 +111,7 @@ class App(QObject):
 
     def start(self, show: bool = True, text: str | None = None) -> None:
         if self.hotkey is not None:
-            self.hotkey.start(self.settings.hotkey)
+            self.hotkey.start(self.settings.hotkeys())
         if self.tray is not None:
             self.tray.show()
         todo = self._missing()
@@ -174,11 +177,34 @@ class App(QObject):
 
     # ------------------------------------------------------- read selection
 
-    def read_selection(self, from_tray: bool = False) -> None:
-        """Copy the selection of the app in front and read it (runs the capture off the GUI thread)."""
+    def hotkey_pressed(self, name: str) -> None:
+        if name == "read":
+            self.read_hotkey()
+        elif name == "next":
+            self.player.next()
+        elif name == "prev":
+            self.player.prev()
+
+    def read_hotkey(self) -> None:
+        """The read hotkey: pause while reading; while paused, read a new selection or resume."""
+        state = self.player.state
+        if state in (State.PLAYING, State.LOADING) and self.window.view.count:
+            self.player.pause()
+        elif state == State.PAUSED and self.window.view.count:
+            self.read_selection(resume=True)
+        else:
+            self.read_selection()
+
+    def read_selection(self, from_tray: bool = False, resume: bool = False) -> None:
+        """Copy the selection of the app in front and read it (runs the capture off the GUI thread).
+
+        With `resume`, a selection that is missing or the same as the text being read
+        resumes it instead.
+        """
         if self._capturing:
             return
         self._capturing = True
+        self._resume_after_capture = resume
         settle = 0.0
         if from_tray and native.enabled():  # the tray menu took the focus; give it back
             target = native.previous_app_window()
@@ -199,6 +225,13 @@ class App(QObject):
 
     def _on_captured(self, text: str | None) -> None:
         self._capturing = False
+        resume, self._resume_after_capture = self._resume_after_capture, False
+        new = bool(text and text.strip()) and normalize(text) != self.window.view.toPlainText()
+        if resume and not new:
+            if self.player.state == State.PAUSED:
+                self.player.resume()
+            self._update_tray()
+            return
         self.show_window()
         if text is not None:  # None: nothing was selected, so just show the window
             self.window.load_text(text)
@@ -206,41 +239,42 @@ class App(QObject):
 
     # ---------------------------------------------------------------- hotkey
 
-    def _hotkey_status(self, hotkey: str, error: str | None) -> None:
-        if self.tray is not None:
+    def _hotkey_status(self, name: str, hotkey: str, error: str | None) -> None:
+        if self.tray is not None and name == "read":
             self.tray.set_hotkey(hotkey, error)
         if self.dialog is not None:
-            self.dialog.set_hotkey_status(hotkey, error)
+            self.dialog.set_hotkey_status(name, hotkey, error)
         if error and (self.dialog is None or not self.dialog.isVisible()):
             if self.tray is not None:
                 self.tray.notify("Hotkey not available", f"{error} Choose another one in Settings.")
             else:
                 self.window.show_error(error)
 
-    def set_hotkey(self, hotkey: str) -> None:
-        self.settings.hotkey = hotkey
+    def set_hotkey(self, hotkey: str, name: str = "read") -> None:
+        setattr(self.settings, HOTKEYS[name][0], hotkey)
         self.save_settings()
         if self.hotkey is not None:
-            self.hotkey.set(hotkey)
+            self.hotkey.set(name, hotkey)
 
     def _hotkey_recording(self, recording: bool) -> None:
-        """Release the hotkey while the user records a new one, so the keys reach the dialog."""
+        """Release the hotkeys while the user records a new one, so the keys reach the dialog."""
         if self.hotkey is not None:
-            self.hotkey.set(None if recording else self.settings.hotkey)
+            self.hotkey.suspend(recording)
 
     # -------------------------------------------------------------- settings
 
     def show_settings(self) -> None:
         if self.dialog is None:
             d = SettingsDialog(self.settings, autostart.is_enabled(), self.window)
-            d.hotkey_changed.connect(self.set_hotkey)
+            d.hotkey_changed.connect(lambda name, combo: self.set_hotkey(combo, name))
             d.hotkey_recording.connect(self._hotkey_recording)
             d.restore_clipboard_changed.connect(self._set_restore_clipboard)
             d.on_top_changed.connect(self.window.set_always_on_top)
             d.autostart_changed.connect(self._set_autostart)
             self.dialog = d
-            if self.hotkey is not None and self.hotkey.hotkey:
-                d.set_hotkey_status(self.hotkey.hotkey, self.hotkey.error)
+            if self.hotkey is not None:
+                for name, (combo, error) in self.hotkey.states.items():
+                    d.set_hotkey_status(name, combo, error)
         d = self.dialog
         d.apply_theme(themes.THEMES.get(self.window.theme, themes.DARK))
         d.set_on_top(self.window.always_on_top)

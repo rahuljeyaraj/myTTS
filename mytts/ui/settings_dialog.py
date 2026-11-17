@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import hotkey as hk
-from ..settings import Settings
+from ..settings import HOTKEYS, Settings
 from . import theme as themes
 
 _MODIFIER_KEYS = {Qt.Key.Key_Control, Qt.Key.Key_Alt, Qt.Key.Key_Shift, Qt.Key.Key_Meta, Qt.Key.Key_AltGr}
@@ -163,8 +163,15 @@ class HotkeyEdit(QPushButton):
         super().focusOutEvent(e)
 
 
+_HOTKEY_HINTS = {
+    "read": "Select text in any app, then press this. Press again to pause or resume.",
+    "next": "Skip to the next sentence, from any app.",
+    "prev": "Go back one sentence, from any app.",
+}
+
+
 class SettingsDialog(QDialog):
-    hotkey_changed = Signal(str)
+    hotkey_changed = Signal(str, str)  # action name, hotkey
     hotkey_recording = Signal(bool)
     restore_clipboard_changed = Signal(bool)
     on_top_changed = Signal(bool)
@@ -176,11 +183,17 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("mytts settings")
         self.setMinimumWidth(500)
 
-        self.hotkey_edit = HotkeyEdit(settings.hotkey)
-        self.hotkey_edit.changed.connect(self.hotkey_changed)
-        self.hotkey_edit.recording_changed.connect(self.hotkey_recording)
-        self.hotkey_status = QLabel(objectName="hint")
-        self.hotkey_status.setWordWrap(True)
+        self.hotkey_edits: dict[str, HotkeyEdit] = {}
+        self.hotkey_statuses: dict[str, QLabel] = {}
+        for name, (field, _label) in HOTKEYS.items():
+            edit = HotkeyEdit(getattr(settings, field))
+            edit.changed.connect(lambda combo, name=name: self.hotkey_changed.emit(name, combo))
+            edit.recording_changed.connect(self.hotkey_recording)
+            status = QLabel(objectName="hint")
+            status.setWordWrap(True)
+            status.hide()
+            self.hotkey_edits[name], self.hotkey_statuses[name] = edit, status
+        self.hotkey_edit = self.hotkey_edits["read"]
 
         self.restore_switch = Switch()
         self.restore_switch.setChecked(settings.restore_clipboard)
@@ -198,13 +211,12 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 18)
         layout.setSpacing(16)
-        hotkey_block = QVBoxLayout()
-        hotkey_block.setSpacing(8)
-        hotkey_block.addLayout(self._row("Read selection", "Select text in any app, then press this.",
-                                         self.hotkey_edit))
-        hotkey_block.addWidget(self.hotkey_status)
-        self.hotkey_status.hide()
-        layout.addLayout(hotkey_block)
+        for name, (_field, label) in HOTKEYS.items():
+            block = QVBoxLayout()
+            block.setSpacing(8)
+            block.addLayout(self._row(label, _HOTKEY_HINTS[name], self.hotkey_edits[name]))
+            block.addWidget(self.hotkey_statuses[name])
+            layout.addLayout(block)
         layout.addLayout(self._row("Restore the clipboard",
                                    "Put back what was on the clipboard after copying the selection.",
                                    self.restore_switch))
@@ -231,12 +243,15 @@ class SettingsDialog(QDialog):
         row.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
         return row
 
-    def set_hotkey_status(self, hotkey: str, error: str | None) -> None:
-        self.hotkey_edit.set_hotkey(hotkey)
-        self.hotkey_status.setText(error or "")
-        self.hotkey_status.setProperty("error", bool(error))
-        _repolish(self.hotkey_status)
-        self.hotkey_status.setVisible(bool(error))
+    def set_hotkey_status(self, name: str, hotkey: str, error: str | None) -> None:
+        if name not in self.hotkey_edits:
+            return
+        self.hotkey_edits[name].set_hotkey(hotkey)
+        status = self.hotkey_statuses[name]
+        status.setText(error or "")
+        status.setProperty("error", bool(error))
+        _repolish(status)
+        status.setVisible(bool(error))
 
     def set_on_top(self, on: bool) -> None:
         if self.on_top_switch.isChecked() != on:
@@ -251,5 +266,6 @@ class SettingsDialog(QDialog):
         themes.style_title_bar(int(self.winId()), t)
 
     def closeEvent(self, e) -> None:  # noqa: N802
-        self.hotkey_edit.stop()
+        for edit in self.hotkey_edits.values():
+            edit.stop()
         super().closeEvent(e)

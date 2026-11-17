@@ -82,6 +82,58 @@ def test_hotkey_reads_the_selection(made):
     assert app.player.state in (State.LOADING, State.PLAYING)
 
 
+def playing_app(made, capture):
+    app = made(capture=capture)
+    app.start(show=False)
+    app.read_selection()
+    assert wait_until(lambda: not app._capturing)
+    app.player._core._drain_jobs()
+    app.player.play(0)  # the fake stream never runs the callback, so start with the audio ready
+    assert wait_until(lambda: app.player.state == State.PLAYING)
+    return app
+
+
+def test_read_hotkey_pauses_and_resumes(made):
+    calls = []
+    app = playing_app(made, lambda restore: calls.append(1) or TEXT)
+    app.hotkey_pressed("read")
+    assert app.player.state == State.PAUSED and not app._capturing
+    assert len(calls) == 1  # pausing does not copy anything
+    app.hotkey_pressed("read")  # the same text is still selected
+    assert wait_until(lambda: not app._capturing)
+    assert app.player.state == State.PLAYING and len(calls) == 2
+
+
+def test_read_hotkey_resumes_when_nothing_is_selected(made):
+    texts = [TEXT, None]
+    app = playing_app(made, lambda restore: texts.pop(0))
+    app.hotkey_pressed("read")
+    app.hotkey_pressed("read")
+    assert wait_until(lambda: not app._capturing)
+    assert app.player.state == State.PLAYING and app.window.view.count == 2
+
+
+def test_read_hotkey_while_paused_reads_a_new_selection(made):
+    texts = [TEXT, "Something else. Entirely new. Three."]
+    app = playing_app(made, lambda restore: texts.pop(0))
+    app.player.next()
+    app.hotkey_pressed("read")
+    assert app.player.state == State.PAUSED
+    app.hotkey_pressed("read")
+    assert wait_until(lambda: not app._capturing)
+    assert app.window.view.count == 3 and app.player.current == 0
+    assert app.player.state in (State.LOADING, State.PLAYING)
+
+
+def test_next_and_previous_hotkeys(made):
+    app = playing_app(made, lambda restore: TEXT)
+    assert app.player.current == 0
+    app.hotkey_pressed("next")
+    assert app.player.current == 1
+    app.hotkey_pressed("prev")
+    assert app.player.current == 0
+
+
 def test_nothing_selected_just_shows_the_window(made):
     app = made(capture=lambda restore: None)
     app.start(show=False)
@@ -260,6 +312,11 @@ def test_settings_dialog(made, monkeypatch, tmp_path):
     assert not d.hotkey_edit.recording
     assert app.settings.hotkey == "Ctrl+Shift+R"
     assert Settings.load(tmp_path / "settings.json").hotkey == "Ctrl+Shift+R"
+
+    d.hotkey_edits["next"].click()
+    QTest.keyClick(d.hotkey_edits["next"], Qt.Key.Key_N, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier)
+    assert app.settings.next_hotkey == "Ctrl+Alt+N"
+    assert app.settings.hotkey == "Ctrl+Shift+R"
 
 
 def test_hotkey_edit_rejects_and_cancels(qapp):

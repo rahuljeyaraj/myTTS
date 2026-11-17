@@ -42,6 +42,14 @@ It doesn't need administrator rights, and takes a few minutes, mostly for downlo
 
 Start mytts, select text in any app and press **Ctrl+Alt+Space**. The reader window comes to the front and starts reading.
 
+These hotkeys work from any app, even when the reader window is behind other windows:
+
+| Hotkey | Action |
+| --- | --- |
+| Ctrl+Alt+Space | Read the selection. While reading, it pauses; press it again to resume. If you have selected different text in the meantime, that text is read instead. |
+| Ctrl+Alt+Right | Next sentence |
+| Ctrl+Alt+Left | Previous sentence |
+
 mytts copies the selection by sending the app Ctrl+C, then puts back whatever was on the clipboard before (text, images and files alike). In terminals (Windows Terminal, the classic console, Git Bash, PuTTY, ConEmu) it sends Ctrl+Insert instead, because Ctrl+C there would stop the running program. If nothing is selected, the window just comes to the front.
 
 Windows does not let a normal app send keys to an app running as administrator, so selections in elevated windows can't be read.
@@ -70,7 +78,7 @@ The bottom bar has the voice list, a speed slider (0.5× to 2×; double-click th
 
 ## Settings
 
-- **Read selection hotkey:** click it and press a new combination (it needs Ctrl, Alt or Win). If another app already uses it, the settings window says so.
+- **Hotkeys** for Read selection, Next sentence and Previous sentence: click one and press a new combination (it needs Ctrl, Alt or Win). If another app or another mytts action already uses it, the settings window says so.
 - **Restore the clipboard:** turn it off to keep the copied selection on the clipboard.
 - **Keep the reader on top:** the same as the pin button.
 - **Start with Windows:** starts mytts in the tray when you sign in.

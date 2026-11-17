@@ -70,7 +70,8 @@ def test_register_conflict_and_release():
     events = {1: threading.Event(), 2: threading.Event()}
 
     def sink(n):
-        def on_status(hotkey, error):
+        def on_status(name, hotkey, error):
+            assert name == "read"
             results[n].append((hotkey, error))
             events[n].set()
         return on_status
@@ -80,18 +81,18 @@ def test_register_conflict_and_release():
     first.start()
     second.start()
     try:
-        first.set(combo)
+        first.set("read", combo)
         assert events[1].wait(2) and results[1][-1] == (combo, None)
-        second.set(combo)
+        second.set("read", combo)
         assert events[2].wait(2)
         assert "already used" in results[2][-1][1]
 
-        first.set(None)  # suspended (as while recording a new hotkey)
+        first.suspend(True)  # as while recording a new hotkey
         # The release happens on first's thread and reports nothing, so retry until it has.
         deadline = time.monotonic() + 2
         while True:
             events[2].clear()
-            second.set(combo)
+            second.set("read", combo)
             assert events[2].wait(2)
             if results[2][-1] == (combo, None) or time.monotonic() > deadline:
                 break
@@ -103,7 +104,33 @@ def test_register_conflict_and_release():
 
 
 def test_invalid_hotkey_reports_error():
-    out = []
-    t = hk.HotkeyThread(lambda: None, lambda k, e: out.append((k, e)))
+    t = hk.HotkeyThread(lambda name: None, lambda n, k, e: None)
     ok, error = t._register(None, "Shift+A")
     assert not ok and "Ctrl, Alt or Win" in error
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="RegisterHotKey is Windows-only")
+def test_several_hotkeys_on_one_thread():
+    results = []
+    got = threading.Condition()
+
+    def on_status(name, hotkey, error):
+        with got:
+            results.append((name, hotkey, error))
+            got.notify_all()
+
+    def wait_for(entry):
+        with got:
+            assert got.wait_for(lambda: entry in results, timeout=2), results
+
+    t = hk.HotkeyThread(lambda name: None, on_status, {"read": "Read selection"})
+    t.start()
+    try:
+        t.set("read", "Ctrl+Alt+Shift+F21")
+        t.set("next", "Ctrl+Alt+Shift+F22")
+        wait_for(("read", "Ctrl+Alt+Shift+F21", None))
+        wait_for(("next", "Ctrl+Alt+Shift+F22", None))
+        t.set("next", "Ctrl+Alt+Shift+F21")  # the same keys as another action
+        wait_for(("next", "Ctrl+Alt+Shift+F21", "Ctrl+Alt+Shift+F21 is already used for Read selection."))
+    finally:
+        t.stop()

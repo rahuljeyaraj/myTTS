@@ -147,11 +147,12 @@ def modifier_text(e) -> str:
 
 WM_QUIT, WM_HOTKEY, WM_APP = 0x0012, 0x0312, 0x8000
 _WM_UPDATE = WM_APP + 1
-_HOTKEY_ID = 1
 ERROR_HOTKEY_ALREADY_REGISTERED = 1409
 
-# on_status(hotkey, error): error is None once the hotkey is registered.
-StatusSink = Callable[[str, "str | None"], None]
+# on_hotkey(name) when a hotkey fires; on_status(name, hotkey, error) after each
+# registration attempt, where error is None once the hotkey is registered.
+HotkeySink = Callable[[str], None]
+StatusSink = Callable[[str, str, "str | None"], None]
 
 
 def _user32():
@@ -165,13 +166,18 @@ def _user32():
 
 
 class HotkeyThread:
-    """Owns the registration. `on_hotkey` and `on_status` run on the hotkey thread."""
+    """Owns the registrations, one per named action ("read", "next", ...).
 
-    def __init__(self, on_hotkey: Callable[[], None], on_status: StatusSink):
+    `on_hotkey` and `on_status` run on the hotkey thread.
+    """
+
+    def __init__(self, on_hotkey: HotkeySink, on_status: StatusSink, labels: dict[str, str] | None = None):
         self._on_hotkey = on_hotkey
         self._on_status = on_status
+        self._labels = labels or {}  # name -> "Read selection", for conflict messages
         self._lock = threading.Lock()
-        self._wanted: str | None = None
+        self._wanted: dict[str, str] = {}
+        self._suspended = False
         self._tid = 0
         self._ready = threading.Event()
         self._thread: threading.Thread | None = None
@@ -186,13 +192,25 @@ class HotkeyThread:
             self._thread.start()
             self._ready.wait(2)
 
-    def set(self, hotkey: str | None) -> None:
-        """Register `hotkey` instead of the current one; None unregisters (e.g. while recording)."""
+    def set(self, name: str, hotkey: str | None) -> None:
+        """Register `hotkey` for `name` instead of its current one; None or "" removes it."""
         with self._lock:
-            self._wanted = hotkey
+            if hotkey:
+                self._wanted[name] = hotkey
+            else:
+                self._wanted.pop(name, None)
+        self._update(name, hotkey)
+
+    def suspend(self, on: bool) -> None:
+        """Release every hotkey (while the user records a new one), or register them again."""
+        with self._lock:
+            self._suspended = on
+        self._update(None, None)
+
+    def _update(self, name: str | None, hotkey: str | None) -> None:
         if self._thread is None:
-            if hotkey is not None and not self.available:
-                self._on_status(hotkey, "Global hotkeys need Windows.")
+            if name and hotkey and not self.available:
+                self._on_status(name, hotkey, "Global hotkeys need Windows.")
             return
         self._post(_WM_UPDATE)
 
@@ -211,32 +229,44 @@ class HotkeyThread:
         user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 0)  # creates this thread's queue
         self._tid = ctypes.windll.kernel32.GetCurrentThreadId()
         self._ready.set()
-        registered = False
+        registered: dict[int, tuple[str, str]] = {}  # id -> (name, hotkey)
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-            if msg.message == WM_HOTKEY and msg.wParam == _HOTKEY_ID:
+            if msg.message == WM_HOTKEY and msg.wParam in registered:
                 try:
-                    self._on_hotkey()
+                    self._on_hotkey(registered[msg.wParam][0])
                 except Exception:  # never let a callback kill the loop
                     pass
             elif msg.message == _WM_UPDATE:
-                if registered:
-                    user32.UnregisterHotKey(None, _HOTKEY_ID)
-                    registered = False
                 with self._lock:
-                    wanted = self._wanted
-                if wanted is not None:
-                    registered, error = self._register(user32, wanted)
-                    self._on_status(wanted, error)
-        if registered:
-            user32.UnregisterHotKey(None, _HOTKEY_ID)
+                    wanted = {} if self._suspended else dict(self._wanted)
+                current = {name: hotkey for name, hotkey in registered.values()}
+                if current == wanted:
+                    continue
+                for hid in registered:
+                    user32.UnregisterHotKey(None, hid)
+                registered.clear()
+                taken: dict[tuple[int, int], str] = {}
+                for hid, (name, hotkey) in enumerate(wanted.items(), start=1):
+                    ok, error = self._register(user32, hotkey, hid, taken, name)
+                    if ok:
+                        registered[hid] = (name, hotkey)
+                    if current.get(name) != hotkey or error:
+                        self._on_status(name, hotkey, error)
+        for hid in registered:
+            user32.UnregisterHotKey(None, hid)
 
-    @staticmethod
-    def _register(user32, hotkey: str) -> tuple[bool, str | None]:
+    def _register(self, user32, hotkey: str, hid: int = 1, taken: dict | None = None,
+                  name: str = "") -> tuple[bool, str | None]:
         try:
             mods, vk = parse(hotkey)
         except ValueError as e:
             return False, str(e)
-        if user32.RegisterHotKey(None, _HOTKEY_ID, mods | MOD_NOREPEAT, vk):
+        if taken is not None:
+            other = taken.get((mods, vk))
+            if other is not None:
+                return False, f"{hotkey} is already used for {self._labels.get(other, other)}."
+            taken[(mods, vk)] = name
+        if user32.RegisterHotKey(None, hid, mods | MOD_NOREPEAT, vk):
             return True, None
         code = ctypes.get_last_error()
         if code == ERROR_HOTKEY_ALREADY_REGISTERED:
@@ -247,30 +277,35 @@ class HotkeyThread:
 class GlobalHotkey(QObject):
     """Qt face of `HotkeyThread`; its signals are delivered on the GUI thread."""
 
-    activated = Signal()
-    status = Signal(str, object)  # hotkey, error message or None
+    activated = Signal(str)  # name
+    status = Signal(str, str, object)  # name, hotkey, error message or None
 
-    _fired = Signal()
-    _status = Signal(str, object)
+    _fired = Signal(str)
+    _status = Signal(str, str, object)
 
-    def __init__(self, parent: QObject | None = None):
+    def __init__(self, parent: QObject | None = None, labels: dict[str, str] | None = None):
         super().__init__(parent)
         self._fired.connect(self.activated, Qt.ConnectionType.QueuedConnection)
         self._status.connect(self._on_status, Qt.ConnectionType.QueuedConnection)
-        self._thread = HotkeyThread(self._fired.emit, self._status.emit)
-        self.hotkey: str | None = None
-        self.error: str | None = None
+        self._thread = HotkeyThread(self._fired.emit, self._status.emit, labels)
+        self.states: dict[str, tuple[str, str | None]] = {}  # name -> (hotkey, error)
 
-    def start(self, hotkey: str) -> None:
+    def start(self, hotkeys: dict[str, str]) -> None:
         self._thread.start()
-        self.set(hotkey)
+        for name, hotkey in hotkeys.items():
+            self.set(name, hotkey)
 
-    def set(self, hotkey: str | None) -> None:
-        self._thread.set(hotkey)
+    def set(self, name: str, hotkey: str | None) -> None:
+        if not hotkey:
+            self.states.pop(name, None)
+        self._thread.set(name, hotkey)
+
+    def suspend(self, on: bool) -> None:
+        self._thread.suspend(on)
 
     def stop(self) -> None:
         self._thread.stop()
 
-    def _on_status(self, hotkey: str, error: object) -> None:
-        self.hotkey, self.error = hotkey, error
-        self.status.emit(hotkey, error)
+    def _on_status(self, name: str, hotkey: str, error: object) -> None:
+        self.states[name] = (hotkey, error)
+        self.status.emit(name, hotkey, error)

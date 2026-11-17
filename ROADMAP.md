@@ -127,7 +127,15 @@ Known limits:
 
 ## After v0.1.0
 
-No milestone is planned yet. Candidates:
+### Hotkey pause and next/previous hotkeys (done)
+
+- The read hotkey toggles: while playing or loading it pauses (without copying anything). While paused it copies the selection first: if it is missing or the same as the text in the reader (compared after `normalize()`), it resumes; if it is different text, that text is read from the start. When nothing is loaded or playback is stopped, it reads the selection as before.
+- New global hotkeys: Next sentence (`Ctrl+Alt+Right`) and Previous sentence (`Ctrl+Alt+Left`), settings `next_hotkey` / `prev_hotkey`. They call `player.next()` / `prev()`, so while paused they move the highlight and stay paused, and while stopped they do nothing. They don't bring the window to the front.
+- `HotkeyThread` now holds several named hotkeys (`set(name, hotkey)`, `suspend(on)`), each with its own `RegisterHotKey` id on the same thread. Signals carry the action name. Two actions with the same keys report "… is already used for Read selection."
+- `settings.HOTKEYS` maps action name to settings field and label; the settings dialog has one recorder row per action. While any row is recording, every hotkey is released.
+- Tests: 90 in total. Checked on the dev machine that `Ctrl+Alt+Right` and `Ctrl+Alt+Left` register and fire on real (injected) key presses.
+
+Other candidates:
 
 - A self-contained build (PyInstaller or Nuitka) so Python isn't needed.
 - Recovering when the output device disappears mid-sentence (M2 limit).
