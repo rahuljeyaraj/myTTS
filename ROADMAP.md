@@ -145,9 +145,101 @@ Known limits:
 
 Measured on the dev machine, switching the default between the USB speakers and a monitor's HDMI audio through `IPolicyConfig` while playing silence: the stream followed within one or two polls, and the switch itself took 77 ms. After a change made while paused, resume opened on the restored default. Reading the default endpoint takes about 4.5 ms of wall time and no measurable CPU in the process.
 
-Other candidates:
+## Going public (plan)
 
-- A self-contained build (PyInstaller or Nuitka) so Python isn't needed.
+Goal: release mytts for free on GitHub as a Windows installer (`mytts-setup-<version>.exe`) that needs no Python, in a repo that looks professional. The repo stays private until the user has reviewed everything (M10). It is made public only when the user says so (M11).
+
+### Decisions for the user (answer before M6)
+
+1. **The voice model in the installer.** Recommended: the installer downloads the model during setup (354 MB, SHA-256 checked) and reuses it on updates, so the installer stays at about 70 to 100 MB. The reader window keeps its download button as a fallback. The alternative is to bundle the model (installer about 450 MB, installs fully offline).
+2. **The name.** "mytts" reads like a personal project. Renaming is cheap now and expensive after launch (repo URL, app ID, folders, links in posts). Keep it or choose a new name before M6.
+3. **The version of the first public release.** `0.2.0` (honest "early") or `1.0.0` (stable launch).
+4. **The comparison with FluentVoice Pro.** See M9. The points the user remembers have to be checked against the current version first.
+
+### M5: Private data audit of the whole history
+
+Making the repo public publishes every commit, tag and file that ever existed, not only the current tree.
+
+- Already checked (2026-11-26): there are 6 commits, one branch (`main`) and one tag (`v0.1.0`). Every author and committer is `rahuljeyaraj <19166091+rahuljeyaraj@users.noreply.github.com>`, so no personal email is in the commit metadata.
+- List every path that was ever committed (`git log --all --name-only`), including deleted files, and read anything unexpected.
+- Scan every blob in every commit with gitleaks (`gitleaks git`) for tokens, keys and passwords.
+- Grep all history for personal data: the real email, phone numbers, `C:\Users\…` paths, machine and network names, IP addresses, the GCM token pattern (`gho_`, `ghp_`), and the contents of `.env` or credential files.
+- Look at each binary: `docs/*.png` (only sample text, no taskbar, notifications or other windows), and strip PNG metadata.
+- Read every commit message in full.
+- Check the GitHub side too, because it is published along with the code: releases, Actions runs and logs, issues, the wiki, deploy keys, webhooks and secrets (REST API).
+- Add `*.code-workspace` to `.gitignore`. The untracked `mytts.code-workspace` holds no private data, but it doesn't belong in the repo.
+- If anything turns up: rotate it first if it is a secret, then rewrite history with `git filter-repo`, force-push, and recreate the `v0.1.0` tag. This is safe now, while the repo is private and has one user.
+- Record the result in this file: what was scanned and what was found.
+
+### M6: Self-contained build (no Python needed)
+
+- PyInstaller, one-folder mode (not one-file: it starts faster, triggers fewer antivirus false positives, and keeps the Qt DLLs replaceable as the LGPL requires). A spec file `packaging/mytts.spec`. Fall back to Nuitka only if Defender flags the PyInstaller build.
+- Collect the data that is loaded at run time: the `espeakng_loader` DLL and `espeak-ng-data`, the `kokoro_onnx` config, the `phonemizer` files and the onnxruntime DLLs. Leave out unused Qt modules, translations and plugins to keep the size down.
+- `mytts.exe` is a windowed program with the app icon and Windows version info (product name, version, copyright).
+- Code changes for the frozen build:
+  - `autostart.py`: when `sys.frozen`, the Run command is `"<install>\mytts.exe" --tray`.
+  - Logging to `%LOCALAPPDATA%\mytts\logs\mytts.log` (rotating), because a windowed exe has no console. An unhandled exception is written to the log and shown in a short error dialog.
+  - Settings get an About section: version, a link to the project, the license and third-party notices.
+  - `mytts.exe --version`, and `mytts.exe --self-test` (loads the engine and synthesizes one sentence without playing it), for CI.
+- Test it in Windows Sandbox (built into Windows 11 Pro), which is a clean Windows with no Python: start, read a selection, hotkeys, tray, start with Windows.
+- Record the size, start-up time and time to first speech, compared with the Python install.
+
+### M7: Windows installer
+
+- Inno Setup 6 (free; VS Code uses it). One script, `packaging/mytts.iss`.
+- Installs per user with no administrator rights (`PrivilegesRequired=lowest`) to `%LOCALAPPDATA%\Programs\mytts`. It creates the Start menu shortcut with the AppUserModelID `mytts.app` (Inno supports this natively), an entry in Settings > Apps, and optional tasks for a desktop shortcut and "Start with Windows". Setup ends with "Launch mytts".
+- The model goes to the existing `%LOCALAPPDATA%\mytts\models`, so an existing download is reused. How it gets there depends on decision 1.
+- Upgrades: installing a newer version closes the running copy (`mytts.exe quit`) and keeps the model and settings. If an install from `install.ps1` is found, it is removed first, keeping the model and settings.
+- Uninstall: closes the app, removes the program, the shortcuts and the Run entry. It asks whether to remove the voice model too (354 MB); settings are kept.
+- License compliance, because the installer bundles third-party code:
+  - A `licenses\` folder in the install with the MIT license, Apache-2.0 (Kokoro), GPL-3.0 (eSpeak NG), LGPL-3.0 (Qt / PySide6), and `THIRD_PARTY_NOTICES.md` generated from the frozen build's packages.
+  - eSpeak NG is GPL-3.0, so the installer as a whole is distributed under GPL-3.0 terms. The mytts source stays MIT (which is compatible with the GPL). Each release carries the source of the exact eSpeak NG version it bundles, and the README says this plainly.
+  - The Qt DLLs stay as separate, replaceable files (LGPL).
+- Test in Windows Sandbox: a fresh install, an upgrade over the previous build, an upgrade over an `install.ps1` install, and uninstalling with and without the model.
+- `install.ps1` stays, documented as "install from source" for developers.
+
+### M8: CI and release pipeline (GitHub Actions)
+
+- `ci.yml`: on every push and pull request, run the tests on `windows-latest` with Python 3.10 and 3.13.
+- `release.yml`: on a `v*` tag, run the tests, build the exe, run `--self-test` against a cached model, build the installer, write `SHA256SUMS.txt`, attach the eSpeak NG source, and create a **draft** release with notes from `CHANGELOG.md`. Nothing is published automatically.
+- Pin actions to commit SHAs. Add Dependabot for pip and GitHub Actions.
+- Releases are unsigned at first; Windows SmartScreen will show "Windows protected your PC". The README explains this (More info > Run anyway) and gives the SHA-256. Free signing comes after launch (M11).
+
+### M9: A professional repo
+
+- README, rewritten from the user's point of view:
+  - At the top: the icon, the name, a one-line tagline, badges (latest release, downloads, CI, license, Windows 10/11), a demo GIF, and a big **Download for Windows** link to the latest installer.
+  - Then: features, screenshots, hotkeys, settings, and an FAQ (the SmartScreen warning, privacy and offline use, languages, system requirements, where files live, how to uninstall).
+  - **Background / Inspiration**: mytts was inspired by [FluentVoice Pro](https://github.com/nickotmazgin/fluentvoice-pro) by Nick Otmazgin, and its voice goal by Google's voices in the "Read Aloud" Chrome extension. Credit them warmly, and link them.
+  - **What mytts does differently**, as a factual table, not a list of complaints. Each row is checked by hand against the current FluentVoice Pro (v1.6.7 on 2026-11-26) in Windows Sandbox, and the table says which version was compared. What its README shows today:
+    - Highlighting the sentence being read, and clicking a sentence to jump there: its README does not mention either. This is the main difference.
+    - A status while audio is being prepared: its README now describes one ("Connecting… → Speaking — voice • part 2/7 • 1:05 / 3:10"). If the user saw no such status, that was likely an older version. Leave this row out unless the check shows a real difference.
+    - Offline voices: it now has Kokoro and Piper as well, but it uses online Microsoft voices first. mytts is offline only, with no network use after the model download.
+    - Rows the user wants to add go through the same check. Claims about another person's project must be accurate and polite: it is free software and its author may read the page.
+  - Credits and licenses, building from source, contributing.
+- New files: `CHANGELOG.md` (Keep a Changelog), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant), `SECURITY.md` (private vulnerability reporting), `THIRD_PARTY_NOTICES.md`, `.github/ISSUE_TEMPLATE/` (bug report with version, Windows build and log location; feature request), a pull request template, `.editorconfig`, `.gitattributes`.
+- A demo GIF for the README (select text in a browser, press the hotkey, watch the highlight move). Also an MP4 with sound for LinkedIn. A social preview image (1280×640) in the icon's style.
+- Repo settings through the REST API: description, topics (`text-to-speech`, `tts`, `windows`, `offline`, `kokoro`, `read-aloud`, `accessibility`, `pyside6`), homepage set to the latest release, Issues on, Wiki and Projects off. The social preview image is uploaded by hand in Settings, because there is no API for it.
+
+### M10: Pre-launch review (then stop for the user)
+
+- Build `v0.2.0` (or the version from decision 3) through the release pipeline, as a draft release.
+- In Windows Sandbox, download the installer from the draft release and run through the full test list.
+- Run the M5 scan again over everything committed since.
+- Check every README link, image and badge.
+- Write a short review summary for the user: what will become public, the draft release, the screenshots, the comparison table, and known limits.
+- **Stop here.** Nothing becomes public until the user says so.
+
+### M11: Go public (only when the user says so)
+
+- Make the repo public through the REST API. Publish the draft release. Check the README, release and download from a logged-out browser.
+- Turn on the features that are free for public repos: secret scanning with push protection, Dependabot alerts, private vulnerability reporting. Add a ruleset on `main` that blocks force pushes and deletion.
+- After launch, each step only with the user's go-ahead:
+  - A LinkedIn post (draft written for review) with the MP4.
+  - Posts on Show HN and Reddit (r/software, r/windows, r/opensource).
+  - A winget manifest pull request to `microsoft/winget-pkgs`, so `winget install mytts` works.
+  - An application to the SignPath Foundation for free code signing for open source projects, to remove the SmartScreen warning.
+  - Later: the Microsoft Store, which accepts Win32 installers (check the current terms for individual developers).
 
 ## Dev environment notes
 
