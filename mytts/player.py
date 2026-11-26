@@ -26,6 +26,7 @@ from enum import Enum
 import numpy as np
 from PySide6.QtCore import QObject, Qt, Signal
 
+from .audiodevice import DeviceWatcher
 from .engine import DEFAULT_VOICE, SAMPLE_RATE, Engine, Voice
 from .text import Segment
 
@@ -149,6 +150,7 @@ class Playback:
         self._stream = None
         self._rate = SAMPLE_RATE
         self._stream_idle = True  # True once the callback has asked PortAudio to stop
+        self._device_stale = False  # the default speaker changed while the stream was idle
 
     # ----------------------------------------------------------------- lifecycle
 
@@ -295,6 +297,16 @@ class Playback:
                 self._speed = speed
                 self._restart_segment()
 
+    def device_changed(self) -> None:
+        """The default speaker changed: move playing audio to it, or reopen on the next resume."""
+        with self._lock:
+            if self._stream is None:
+                return  # the next play opens on the current default anyway
+            if self._stream_idle:
+                self._device_stale = True
+                return
+        self._switch_stream()
+
     # ---------------------------------------------------------------- internals
     # Methods below that touch shared state expect self._lock to be held.
 
@@ -348,7 +360,7 @@ class Playback:
     def _run_stream(self, fresh: bool) -> None:
         """Start audio output. Called without the lock held (PortAudio may call back)."""
         try:
-            if fresh or self._stream is None:
+            if fresh or self._stream is None or self._device_stale:
                 self._open_stream()
             else:
                 try:
@@ -363,8 +375,38 @@ class Playback:
                 self._set_state(State.STOPPED, ev)
                 ev.append(("error", f"Could not open the audio device: {e}"))
 
+    def _switch_stream(self) -> None:
+        """Reopen a running stream on the new default device, without losing the place.
+
+        Audio already handed to the old device but not yet heard (about one output
+        latency) is lost with it, so the playhead steps back by that much and fades in.
+        """
+        old = self._stream
+        lag = getattr(old, "latency", 0.0) or 0.0
+        try:
+            old.close()
+        except Exception:  # the old device may already be gone
+            pass
+        with self._lock:
+            self._stream = None
+            self._fade_out = None
+            if self._stream_idle:  # paused or finished just before the switch
+                return
+            if self._clip is not None:
+                self._pos = max(0, self._pos - int(lag * self._rate))
+                if self._pos > 0:
+                    self._fade_in = self._fade_frames()
+        try:
+            self._open_stream()
+        except Exception as e:
+            with self._locked() as ev:
+                self._stream_idle = True
+                self._set_state(State.PAUSED, ev)
+                ev.append(("error", f"Could not switch to the new audio device: {e}"))
+
     def _open_stream(self) -> None:
         old, self._stream = self._stream, None
+        self._device_stale = False
         if old is not None:
             old.close()
         stream, rate = self._stream_factory(self._callback)
@@ -522,14 +564,20 @@ class Player(QObject):
 
     _event = Signal(str, object)
 
-    def __init__(self, voice: str = DEFAULT_VOICE, speed: float = 1.0, parent: QObject | None = None, **kw):
+    def __init__(self, voice: str = DEFAULT_VOICE, speed: float = 1.0, parent: QObject | None = None,
+                 watch_devices: bool | None = None, **kw):
         super().__init__(parent)
         self._event.connect(self._dispatch, Qt.ConnectionType.QueuedConnection)
         self._core = Playback(self._event.emit, voice, speed, **kw)
         self.voices: list[Voice] = []
+        if watch_devices is None:  # only a real sound card has a default to follow
+            watch_devices = kw.get("stream_factory", _open_device_stream) is _open_device_stream
+        self._watcher = DeviceWatcher(lambda: self._event.emit("device", None)) if watch_devices else None
 
     def _dispatch(self, kind: str, value: object) -> None:
-        if kind == "segment":
+        if kind == "device":
+            self._core.device_changed()
+        elif kind == "segment":
             self.segment_started.emit(value)
         elif kind == "state":
             self.state_changed.emit(value)
@@ -544,8 +592,12 @@ class Player(QObject):
     # Delegated commands and queries
     def start(self) -> None:
         self._core.start()
+        if self._watcher is not None:
+            self._watcher.start()
 
     def close(self) -> None:
+        if self._watcher is not None:
+            self._watcher.stop()
         self._core.close()
 
     def load(self, text: str, segments: Sequence[Segment]) -> None:

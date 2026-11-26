@@ -51,7 +51,7 @@ Measured on the dev machine (default device: USB speakers through MME, which acc
 - Callback blocks are 320 frames (13 ms). Pause and stop take effect in the next block.
 - Jumping to a sentence that isn't cached takes about 0.8 s before audio starts; a speed change takes about 0.4 s.
 
-Known limits: if the output device disappears mid-sentence, playback recovers only on the next play or resume.
+Known limits: if the output device disappears mid-sentence, playback recovers only on the next play or resume. (Fixed later when Windows picks a new default; see "Follow the default speaker".)
 
 ### M3: Hotkey, selection capture, tray and settings (done)
 
@@ -135,10 +135,19 @@ Known limits:
 - `settings.HOTKEYS` maps action name to settings field and label; the settings dialog has one recorder row per action. While any row is recording, every hotkey is released.
 - Tests: 90 in total. Checked on the dev machine that `Ctrl+Alt+Right` and `Ctrl+Alt+Left` register and fire on real (injected) key presses.
 
+### Follow the default speaker (done)
+
+- Bug: after Bluetooth headphones connected, mytts kept playing on the old speaker until the user re-selected the default in Sound settings. PortAudio picks its default device at initialization and a stream stays on the device it was opened on. Only a fresh play from Stopped re-initialized it; resume and clicking a sentence while paused restarted the old stream.
+- `mytts/audiodevice.py`: `DefaultOutput` reads the default render endpoint id (eRender, eConsole) through the MMDevice API with plain ctypes COM calls. `DeviceWatcher` polls it every 0.5 s on its own thread (COM in MTA) and calls back once a new id has been seen on two polls in a row. A one-poll flap is ignored, and so is having no output device at all; the device that comes back is reported.
+- `Player` owns the watcher (only when it uses the real sound card stream) and passes the change to `Playback.device_changed()` on the GUI thread. While playing, the stream is closed and reopened on the new default (PortAudio re-init included). The playhead steps back by the old stream's output latency, since that audio was lost with the old device, and fades in. While paused, the stream is marked stale and the next resume opens a new one. If opening fails, playback pauses with "Could not switch to the new audio device: …", and resume tries again.
+- This also covers a device that disappears mid-sentence, as long as Windows moves the default to another device.
+- Tests: 95 in total (device switch while playing, while paused, before any playback, failed switch, watcher debounce).
+
+Measured on the dev machine, switching the default between the USB speakers and a monitor's HDMI audio through `IPolicyConfig` while playing silence: the stream followed within one or two polls, and the switch itself took 77 ms. After a change made while paused, resume opened on the restored default. Reading the default endpoint takes about 4.5 ms of wall time and no measurable CPU in the process.
+
 Other candidates:
 
 - A self-contained build (PyInstaller or Nuitka) so Python isn't needed.
-- Recovering when the output device disappears mid-sentence (M2 limit).
 
 ## Dev environment notes
 

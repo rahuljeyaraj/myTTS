@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import pytest
 
@@ -233,3 +235,82 @@ def test_resample_keeps_pitch_and_length(dst):
     assert abs(len(out) - dst) <= 1
     peak = np.argmax(np.abs(np.fft.rfft(out))) * dst / len(out)
     assert abs(peak - 440) < 2
+
+
+# ----------------------------------------------------------- default device changes
+
+
+def test_device_change_while_playing_moves_to_a_new_stream_without_losing_the_place():
+    r = Rig()
+    r.p.play()
+    r.pump(3)  # 1440 frames of the first sentence handed to the device
+    r.streams[0].latency = 0.01  # 240 frames were still waiting in the old device's buffer
+    r.p.device_changed()
+    assert len(r.streams) == 2 and r.streams[0].closed and r.streams[1].starts == 1
+    assert r.p.state == State.PLAYING
+    a, _ = r.pump(3)
+    assert 0 < a[0] < a[100]  # fades in on the new device
+    # The rest of sentence one plays from just before where the old device stopped.
+    rest = CLIP - 1440 + 240
+    assert np.all(a[:rest] != 0) and np.all(a[rest : rest + 100] == 0)
+    assert r.of("segment") == [0]
+
+
+def test_device_change_while_paused_reopens_on_resume():
+    r = Rig()
+    r.p.play()
+    r.pump(2)
+    r.p.pause()
+    r.pump(1)
+    r.p.device_changed()
+    assert len(r.streams) == 1  # nothing to move while paused
+    r.p.resume()
+    assert len(r.streams) == 2 and r.streams[0].closed
+    a, _ = r.pump(1)
+    assert a.any() and r.p.state == State.PLAYING
+    r.p.pause()
+    r.pump(1)
+    r.p.resume()
+    assert len(r.streams) == 2 and r.streams[1].starts == 2  # back to restarting the same stream
+
+
+def test_device_change_before_any_playback_does_nothing():
+    r = Rig()
+    r.p.device_changed()
+    assert r.streams == []
+    r.p.play()
+    assert len(r.streams) == 1
+
+
+def test_failed_switch_pauses_with_an_error_and_resume_retries():
+    r = Rig()
+    r.p.play()
+    r.pump(2)
+    good = r.p._stream_factory
+
+    def broken(cb):
+        raise OSError("device unavailable")
+
+    r.p._stream_factory = broken
+    r.p.device_changed()
+    assert r.p.state == State.PAUSED
+    assert r.of("error") == ["Could not switch to the new audio device: device unavailable"]
+    r.p._stream_factory = good
+    r.p.resume()
+    a, _ = r.pump(1)
+    assert a.any() and r.p.state == State.PLAYING and r.p.current == 0
+
+
+def test_device_watcher_reports_a_stable_new_default_once():
+    from mytts.audiodevice import DeviceWatcher
+
+    seen = iter(["usb", "usb", "bt", "usb", "bt", "bt", "bt", None, None, "usb", "usb"])
+    changes = []
+    w = DeviceWatcher(lambda: changes.append(1), probe=lambda: lambda: next(seen, None), interval=0)
+    w.start()
+    deadline = time.monotonic() + 2
+    while len(changes) < 2 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    w.stop()
+    # "bt" once it holds for two polls; the single "bt" flap and the gap with no device are ignored.
+    assert len(changes) == 2
