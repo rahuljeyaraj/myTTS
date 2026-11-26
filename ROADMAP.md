@@ -149,12 +149,12 @@ Measured on the dev machine, switching the default between the USB speakers and 
 
 Goal: release mytts for free on GitHub as a Windows installer (`mytts-setup-<version>.exe`) that needs no Python, in a repo that looks professional. The repo stays private until the user has reviewed everything (M10). It is made public only when the user says so (M11).
 
-### Decisions for the user (answer before M6)
+### Decisions
 
-1. **The voice model in the installer.** Recommended: the installer downloads the model during setup (354 MB, SHA-256 checked) and reuses it on updates, so the installer stays at about 70 to 100 MB. The reader window keeps its download button as a fallback. The alternative is to bundle the model (installer about 450 MB, installs fully offline).
-2. **The name.** "mytts" reads like a personal project. Renaming is cheap now and expensive after launch (repo URL, app ID, folders, links in posts). Keep it or choose a new name before M6.
-3. **The version of the first public release.** `0.2.0` (honest "early") or `1.0.0` (stable launch).
-4. **The comparison with FluentVoice Pro.** See M9. The points the user remembers have to be checked against the current version first.
+1. **The voice model (decided):** the installer downloads it during setup (354 MB, SHA-256 checked) and reuses it on updates, so the installer stays at about 70 to 100 MB. The reader window keeps its download button as a fallback.
+2. **The name (decided): myTTS.** This is the display name everywhere people see it: the window title, tray, Start menu, Settings > Apps, installer, README and release names, and the GitHub repo name. Identifiers stay lowercase `mytts` so existing installs and data carry over: the Python package and `python -m mytts`, the `mytts` command, `%LOCALAPPDATA%\mytts` and `%APPDATA%\mytts`, the AppUserModelID `mytts.app`, and the mutex name. Windows file names are not case-sensitive, so the exe is `myTTS.exe` and the installer is `myTTS-setup-<version>.exe`. The display name change is done in M6.
+3. **The version (decided): `1.0.0`** for the first public release.
+4. **The comparison with FluentVoice Pro (open):** see M9. The user may add more issues they noticed. Each one is checked against the current version first.
 
 ### M5: Private data audit of the whole history
 
@@ -223,7 +223,7 @@ Making the repo public publishes every commit, tag and file that ever existed, n
 
 ### M10: Pre-launch review (then stop for the user)
 
-- Build `v0.2.0` (or the version from decision 3) through the release pipeline, as a draft release.
+- Build `v1.0.0` through the release pipeline, as a draft release.
 - In Windows Sandbox, download the installer from the draft release and run through the full test list.
 - Run the M5 scan again over everything committed since.
 - Check every README link, image and badge.
