@@ -354,6 +354,10 @@ def test_autostart_command_and_registry(monkeypatch):
         assert autostart.registered_command() == cmd
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key, 0, winreg.KEY_SET_VALUE) as k:
             winreg.SetValueEx(k, autostart.VALUE_NAME, 0, winreg.REG_SZ, "old command")
+        monkeypatch.setattr(autostart, "is_install", lambda: False)
+        autostart.refresh()  # a checkout or dev build leaves the entry alone
+        assert autostart.registered_command() == "old command"
+        monkeypatch.setattr(autostart, "is_install", lambda: True)
         autostart.refresh()
         assert autostart.registered_command() == cmd
         autostart.set_enabled(False)

@@ -31,6 +31,9 @@ def test_frozen_paths_and_autostart(frozen, tmp_path):
     assert paths.licenses_dir() is None
     (tmp_path / "licenses").mkdir()
     assert paths.licenses_dir() == tmp_path / "licenses"
+    assert not paths.installed_by_setup() and not autostart.is_install()  # a dev build
+    (tmp_path / "unins000.exe").write_bytes(b"")
+    assert paths.installed_by_setup() and autostart.is_install()
 
 
 def test_source_paths():

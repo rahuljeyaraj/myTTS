@@ -11,9 +11,21 @@ An offline, minimalist read-aloud app for Windows. Select text in any window, pr
 
 ## Install
 
-You need Windows 10 or 11 and 64-bit [Python](https://www.python.org/downloads/windows/) 3.10 to 3.13. If you don't have it, `winget install Python.Python.3.12` installs it.
+You need Windows 10 or 11 (64-bit). Run `myTTS-setup-<version>.exe`. It doesn't need administrator rights or Python. Until the first public release, build the installer yourself (see [Development](#development)).
 
-Get the source, then run the installer from that folder:
+Setup:
+
+1. installs myTTS for you only, in `%LOCALAPPDATA%\Programs\mytts`,
+2. downloads the voice model (354 MB, once; checked against a fixed SHA-256) to `%LOCALAPPDATA%\mytts\models`. If the download fails, you can install without it and download it later from the reader window,
+3. adds **myTTS** to the Start menu and to **Settings > Apps**. It can also add a desktop shortcut and start myTTS when you sign in.
+
+**Update:** run the newer setup. It closes the running copy, replaces it and keeps the voice model and your settings. A silent update (`/VERYSILENT`) starts myTTS again in the notification area if it was running.
+
+**Uninstall:** remove **myTTS** in **Settings > Apps**. It asks whether to remove the voice model too. Your settings stay in `%APPDATA%\mytts`. A silent uninstall keeps the model.
+
+### Install from source (for developers)
+
+`install.ps1` installs from a source checkout into a Python environment of its own. It needs 64-bit [Python](https://www.python.org/downloads/windows/) 3.10 to 3.13, and it refuses to run while the setup version is installed (both would use the same shortcut and startup entry). Setup replaces a copy installed this way, keeping the model and settings.
 
 ```powershell
 git clone https://github.com/rahuljeyaraj/mytts.git
@@ -21,11 +33,7 @@ cd mytts
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-It doesn't need administrator rights, and takes a few minutes, mostly for downloading about 480 MB. It:
-
-1. creates a Python environment of its own in `%LOCALAPPDATA%\mytts\venv` and installs myTTS there,
-2. downloads the voice model (354 MB, once; checked against a fixed SHA-256),
-3. adds **myTTS** to the Start menu and to **Settings > Apps**, and starts it.
+It creates `%LOCALAPPDATA%\mytts\venv`, downloads the voice model, adds myTTS to the Start menu and Settings > Apps, and starts it.
 
 | Option | |
 | --- | --- |
@@ -34,9 +42,7 @@ It doesn't need administrator rights, and takes a few minutes, mostly for downlo
 | `-NoLaunch` | Don't start myTTS at the end. |
 | `-Python C:\path\to\python.exe` | Use this Python. By default the newest suitable one registered in Windows is used. |
 
-**Update:** get the new source (`git pull`) and run `install.ps1` again. It closes the running copy, updates it and keeps the voice model and your settings.
-
-**Uninstall:** remove **myTTS** in **Settings > Apps**, or run `powershell -ExecutionPolicy Bypass -File uninstall.ps1`. That removes the program, the shortcut, the startup entry and the voice model. Your settings stay in `%APPDATA%\mytts` unless you add `-RemoveSettings`; add `-KeepModel` to keep the voice model for a later install.
+To update, `git pull` and run `install.ps1` again. To uninstall, remove it in Settings > Apps or run `uninstall.ps1` (`-KeepModel` keeps the voice model, `-RemoveSettings` also deletes your settings).
 
 ## Read from any app
 
@@ -123,7 +129,9 @@ To build the self-contained `myTTS.exe`, which runs without Python:
 powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -SelfTest
 ```
 
-It installs the pinned PyInstaller into `.venv` and writes `dist\myTTS\myTTS.exe` with its `_internal` folder. `-SelfTest` then loads the voice model and synthesizes one sentence. The app writes a log to `%LOCALAPPDATA%\mytts\logs\mytts.log`.
+It installs the pinned PyInstaller into `.venv` and writes `dist\myTTS\myTTS.exe` with its `_internal` and `licenses` folders. `-SelfTest` then loads the voice model and synthesizes one sentence. The app writes a log to `%LOCALAPPDATA%\mytts\logs\mytts.log`.
+
+Add `-Installer` to also build `dist\myTTS-setup-<version>.exe` with [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`), from `packaging\mytts.iss`.
 
 [ROADMAP.md](ROADMAP.md) describes how the app is built, milestone by milestone, with measurements and known limits.
 
@@ -135,4 +143,6 @@ It installs the pinned PyInstaller into `.venv` and writes `dist\myTTS\myTTS.exe
 
 ## License
 
-MIT
+The myTTS source code is MIT licensed ([LICENSE](LICENSE)).
+
+The installer and `myTTS.exe` also contain eSpeak NG and phonemizer, which are GPL-3.0-or-later, so the program as distributed is under the terms of the GNU GPL version 3. Each release carries the source of the eSpeak NG version it bundles. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every bundled component and its license; the installed app has the license texts in its `licenses` folder.

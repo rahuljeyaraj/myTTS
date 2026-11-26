@@ -1,8 +1,10 @@
 <#
 .SYNOPSIS
-    Installs myTTS for the current user.
+    Installs myTTS from source for the current user (for developers).
 
 .DESCRIPTION
+    Most people should use the installer, myTTS-setup-<version>.exe, instead.
+
     Creates a Python environment in %LOCALAPPDATA%\mytts\venv, installs mytts and
     its dependencies into it, downloads the voice model (354 MB, once), and adds
     myTTS to the Start menu and to Settings > Apps. No administrator rights are
@@ -50,6 +52,7 @@ $VenvPythonw = Join-Path $Venv 'Scripts\pythonw.exe'
 $IconFile = Join-Path $Root 'mytts.ico'
 $Shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'myTTS.lnk'
 $UninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\mytts'
+$SetupKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\mytts_is1'  # the installer's (AppId mytts)
 $AppId = 'mytts.app'  # must match APP_ID in mytts\ui\native.py
 $MinMinor, $MaxMinor = 10, 13  # kokoro-onnx supports Python 3.10 to 3.13
 
@@ -250,6 +253,11 @@ namespace MyttsSetup
 try {
     if (-not (Test-Path (Join-Path $Source 'pyproject.toml'))) {
         throw "install.ps1 must stay in the mytts source folder (pyproject.toml was not found next to it)."
+    }
+    if (Test-Path $SetupKey) {
+        # Both would use the same Start menu shortcut, Run entry and Settings > Apps name.
+        throw ('myTTS is already installed with the installer. Uninstall it first (Settings > Apps > myTTS), ' +
+            'or run the source checkout directly with: python -m mytts')
     }
     $identity = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     $elevated = $identity.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)

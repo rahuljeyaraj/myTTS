@@ -12,10 +12,19 @@ The Python to run PyInstaller with. Default: .venv\Scripts\python.exe.
 
 .PARAMETER SelfTest
 After the build, run myTTS.exe --self-test (needs the voice model).
+
+.PARAMETER Installer
+Also build the installer, dist\myTTS-setup-<version>.exe, with Inno Setup 6 (packaging\mytts.iss).
+
+.PARAMETER Iscc
+The Inno Setup compiler. Default: ISCC.exe on PATH, or in the usual per-user or per-machine
+Inno Setup 6 folder (winget install JRSoftware.InnoSetup).
 #>
 param(
     [string]$Python = '',
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$Installer,
+    [string]$Iscc = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +53,28 @@ try {
         $p = Start-Process $exe -ArgumentList '--self-test' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $log
         Get-Content $log
         if ($p.ExitCode) { throw "Self-test failed (exit code $($p.ExitCode))" }
+    }
+
+    if ($Installer) {
+        if (-not $Iscc) {
+            $found = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+            $candidates = @(
+                $(if ($found) { $found.Source }),
+                (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
+                (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+                (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+            ) | Where-Object { $_ -and (Test-Path $_) }
+            if (-not $candidates) { throw 'Inno Setup 6 not found: winget install JRSoftware.InnoSetup, or pass -Iscc' }
+            $Iscc = @($candidates)[0]
+        }
+        & $Python packaging\installer_assets.py build\installer
+        if ($LASTEXITCODE) { throw 'installer_assets.py failed' }
+        $started = Get-Date
+        & $Iscc /Q packaging\mytts.iss
+        if ($LASTEXITCODE) { throw "Inno Setup failed (exit code $LASTEXITCODE)" }
+        $setup = Get-ChildItem (Join-Path $root 'dist\myTTS-setup-*.exe') | Sort-Object LastWriteTime | Select-Object -Last 1
+        $took = [int]((Get-Date) - $started).TotalSeconds
+        Write-Host ('Built {0} ({1:N0} MB, {2} s)' -f $setup.FullName, ($setup.Length / 1MB), $took)
     }
 }
 finally {

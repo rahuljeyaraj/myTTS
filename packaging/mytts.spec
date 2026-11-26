@@ -78,6 +78,9 @@ QT_KEEP_PLUGINS = {"platforms/qwindows.dll"}
 QT_DROP_DLLS = {"opengl32sw.dll", "qt6pdf.dll", "qt6svg.dll", "qt6opengl.dll", "qt6qml.dll",
                 "qt6qmlmodels.dll", "qt6qmlmeta.dll", "qt6qmlworkerscript.dll", "qt6quick.dll",
                 "qt6virtualkeyboard.dll"}
+# sounddevice ships PortAudio for every platform; it loads libportaudio64bit.dll on 64-bit Windows.
+# The ASIO builds are only used when SD_ENABLE_ASIO is set, which myTTS doesn't do.
+PORTAUDIO_KEEP = {"libportaudio64bit.dll", "readme.md"}
 # OpenSSL 3 comes with PySide6 for Qt's TLS plugin, which is left out. Python's own _ssl
 # (used to download the voice model) links to OpenSSL 1.1, which stays.
 DROP_TOP = {"libcrypto-3-x64.dll", "libssl-3-x64.dll"}
@@ -88,6 +91,8 @@ def keep(entry) -> bool:
     low = dest.lower()
     if low in DROP_TOP:
         return False
+    if low.startswith("_sounddevice_data/portaudio-binaries/"):
+        return low.rsplit("/", 1)[-1] in PORTAUDIO_KEEP
     if low.startswith("pyside6/translations/"):
         return False
     if low.startswith("pyside6/plugins/"):
@@ -119,3 +124,10 @@ exe = EXE(
 )
 
 coll = COLLECT(exe, a.binaries, a.datas, name=NAME, upx=False)
+
+# COLLECT has built dist/myTTS by now. Add the licenses folder next to myTTS.exe (license texts
+# and THIRD_PARTY_NOTICES.md, also written to the repository root).
+sys.path.insert(0, str(ROOT / "packaging"))
+import notices  # noqa: E402
+
+notices.write(Path(DISTPATH) / NAME, [e[0] for e in a.pure], [e[0] for e in a.binaries + a.datas])

@@ -206,25 +206,54 @@ How it was tested: **Windows Sandbox is not enabled on the dev machine** (turnin
 
 Still to do, in M7: the same checks in Windows Sandbox, together with the installer tests. The user turns the feature on first (Turn Windows features on or off > Windows Sandbox, then restart).
 
-### M7: Windows installer
+### M7: Windows installer (done)
 
-- Inno Setup 6 (free; VS Code uses it). One script, `packaging/mytts.iss`.
-- Installs per user with no administrator rights (`PrivilegesRequired=lowest`) to `%LOCALAPPDATA%\Programs\mytts`. It creates the Start menu shortcut with the AppUserModelID `mytts.app` (Inno supports this natively), an entry in Settings > Apps, and optional tasks for a desktop shortcut and "Start with Windows". Setup ends with "Launch mytts".
-- The model goes to the existing `%LOCALAPPDATA%\mytts\models`, so an existing download is reused. How it gets there depends on decision 1.
-- It packages `dist\myTTS` from `packaging\build.ps1` and runs `myTTS.exe quit` before replacing files. The app re-points an enabled Run entry at whichever copy starts, so a dev build run on a machine with the installed app moves it; consider ignoring builds outside the install folder there.
-- Upgrades: installing a newer version closes the running copy (`mytts.exe quit`) and keeps the model and settings. If an install from `install.ps1` is found, it is removed first, keeping the model and settings.
-- Uninstall: closes the app, removes the program, the shortcuts and the Run entry. It asks whether to remove the voice model too (354 MB); settings are kept.
-- License compliance, because the installer bundles third-party code:
-  - A `licenses\` folder in the install with the MIT license, Apache-2.0 (Kokoro), GPL-3.0 (eSpeak NG), LGPL-3.0 (Qt / PySide6), and `THIRD_PARTY_NOTICES.md` generated from the frozen build's packages.
-  - eSpeak NG is GPL-3.0, so the installer as a whole is distributed under GPL-3.0 terms. The mytts source stays MIT (which is compatible with the GPL). Each release carries the source of the exact eSpeak NG version it bundles, and the README says this plainly.
-  - The Qt DLLs stay as separate, replaceable files (LGPL).
-- Test in Windows Sandbox: a fresh install, an upgrade over the previous build, an upgrade over an `install.ps1` install, and uninstalling with and without the model. Also the M6 checks of the exe itself (start, read a selection, hotkeys, tray, start with Windows), which ran on the dev machine because Sandbox was not enabled.
-- `install.ps1` stays, documented as "install from source" for developers.
+`packaging\build.ps1 -Installer` builds `dist\myTTS-setup-<version>.exe` with Inno Setup 6.7.3 (`winget install JRSoftware.InnoSetup`, per user). Result (2026-11-26):
+
+- **Script:** `packaging/mytts.iss`. `packaging/installer_assets.py` writes `build\installer\defines.iss` (version, display name, app id, publisher, copyright line, default hotkey, and the model files' URL, size and SHA-256, all read from the Python code) plus the setup icon and the wizard images drawn from the app icon. The script stops with an error if `dist\myTTS\myTTS.exe` has a different version than `mytts.__version__`. `WizardStyle=modern dynamic` follows the Windows light or dark mode.
+- **Install:** per user, no administrator rights, `%LOCALAPPDATA%\Programs\mytts` (`{autopf}` in non-admin mode). `AppId=mytts`, so the Settings > Apps key is `mytts_is1`, separate from install.ps1's `mytts`. The folder page shows on the first install only. `[InstallDelete]` empties `_internal` and `licenses` first, so files an older build had and a newer one doesn't can't linger and be loaded (checked with a planted file).
+- **Shortcuts and tasks:** Start menu `myTTS.lnk` with the AppUserModelID `mytts.app` (read back through the shell: `System.AppUserModel.ID` is `mytts.app`). Tasks: desktop shortcut, and "Start myTTS when I sign in to Windows", which writes the same Run entry the app writes (`"<app>\myTTS.exe" --tray`; a test checks the format). `UsePreviousTasks=no`: each task starts ticked when it is set now (the Run entry or the desktop shortcut exists), and unticking one removes it. A silent install keeps what is set; `/TASKS=` can add to it. The finish page offers "Launch myTTS".
+- **Voice model (decision 1):** on clicking Install, if `kokoro-v1.0.onnx` or `voices-v1.0.bin` is missing or has the wrong size (the app's own check), a download page fetches the missing files into setup's temp folder with Inno's SHA-256 check. They are moved into `%LOCALAPPDATA%\mytts\models` after the files are installed. When the download fails or is stopped, a dialog offers "Try again" or "Install without it"; a silent install continues without it. The app then shows its download button.
+- **Updates:** before replacing files, setup runs `myTTS.exe quit` (which waits for the app to exit). After a silent update it starts myTTS again with `--tray` if it closed a running copy; an interactive update offers "Launch myTTS".
+- **Replacing an install.ps1 copy:** if `HKCU\...\Uninstall\mytts` exists, setup runs that copy's `uninstall.ps1 -KeepModel` (hidden) in `PrepareToInstall`, and stops with a message if the key is still there afterwards. Whether "Start with Windows" was on is read when setup starts, so the setting carries over to the new exe. `install.ps1` now refuses to run while `mytts_is1` exists, and the README calls it "install from source (for developers)".
+- **Uninstall:** `[UninstallRun]` runs `myTTS.exe quit`. It removes the program, the shortcuts, the Run entry (only when it starts this copy) and `%LOCALAPPDATA%\mytts\logs`. It asks "Also remove the voice model?" ("Remove the voice model" / "Keep it"); a silent uninstall keeps it. `%LOCALAPPDATA%\mytts` is removed when nothing is left in it. Settings are kept.
+- **Run entry and dev builds:** `autostart.refresh()` now only re-points an enabled Run entry from an installed copy: myTTS.exe with an `unins*.exe` next to it (`paths.installed_by_setup()`), or mytts installed into a venv. A build in `dist\myTTS` or a source checkout leaves it alone. Turning the setting on from such a copy still points the entry at it.
+- **Licenses:** `packaging/notices.py`, called from the spec after COLLECT, fills `dist\myTTS\licenses`: `myTTS-LICENSE.txt`, `GPL-3.0.txt`, `LGPL-3.0.txt`, `Apache-2.0.txt` and `PortAudio.txt` (kept in `packaging/licenses/`), each bundled package's own license files (found by mapping the modules and files PyInstaller collected to their distributions), Python's `LICENSE.txt` (which covers OpenSSL, libffi, bzip2 and the rest), PyInstaller's `COPYING.txt` for the bootloader, and `THIRD_PARTY_NOTICES.md`. The same notices file is written to the repository root. Bundled: cffi, cloudpickle, dlinfo, espeakng-loader (its MIT license is vendored, because the wheel has none), joblib, kokoro-onnx, numpy, onnxruntime, phonemizer (GPL-3.0+), pyreadline3, PySide6 and shiboken6 (LGPL-3.0), sounddevice, typing_extensions, Python 3.10.11, Qt 6.12.0, eSpeak NG 1.52.0, PortAudio V19.7.0 and the PyInstaller 6.22.3 bootloader. The notices say the installer as a whole is distributed under GPL-3.0 terms, the source stays MIT, and the Qt DLLs are separate files in `_internal\PySide6`.
+- **eSpeak NG source:** espeakng-loader 0.2.4's `espeak-ng.dll` reports 1.52.0. Its build workflow clones the upstream tag `1.52.0` (commit `4870adfa25b1a32b4361592f1be8a40337c58d6c`) and builds it with CMake, without patches. `notices.ESPEAK_SOURCE` maps the version to that tag and commit, and the build fails on a version it doesn't know, so a dependency update can't silently change what M8 must attach.
+- **Smaller build:** the spec now keeps only `libportaudio64bit.dll` from sounddevice's PortAudio binaries (it also had the 32-bit, ARM64, ASIO and macOS builds). That also keeps the ASIO SDK out of the bundle.
+- Tests: 120 in total. New: the assets and defines match the code (model URL, sizes, hashes, app id, version; image sizes), the Run entry's format and key, the script being ASCII and compiling (`ISCC /O-`, syntax only, about 0.1 s; skipped without Inno Setup or a build), the bundled-distribution mapping, the eSpeak NG version being known, every license file named in the notices existing, `installed_by_setup()`, and `refresh()` leaving the entry alone from a dev copy.
+
+Measured on the dev machine:
+
+- The installer is 40 MB (the build is 140 MB). Compiling it takes about 55 s (`lzma2/ultra64`, solid), after the 56 to 63 s PyInstaller build.
+- Interactive upgrade over the install.ps1 copy: 10 s from Install to the finish page, removing the old copy included.
+- Silent update over the installed copy while it ran: 5.1 s, and it was running again in the tray 4 s later. Silent uninstall with the app running in the tray: 4.1 s.
+- Model download inside setup: 60 s for 354 MB (55 s and 5 s for the two files). `myTTS.exe download --verify` passed on the result, and `--self-test` of the installed exe passed (model load 2.1 s, first sentence 1.1 s).
+
+How it was tested: **Windows Sandbox is still not enabled**, so every test ran on the dev machine, driven with UI Automation (`BM_CLICK` posted to the wizard's buttons, `PrintWindow` for screenshots). In order:
+
+1. An interactive upgrade over the install.ps1 copy. The old shortcut, Apps entry and venv were removed; the model, settings and Start with Windows were kept, with the Run entry now on the exe.
+2. The read hotkey on a Notepad selection with the installed copy: it read, then paused.
+3. A silent upgrade with the app running and a planted stale file.
+4. Starting through the Run entry's command (tray, no window), then a silent uninstall (model kept).
+5. A fresh interactive install with no model: downloaded and verified.
+6. An installer built with a broken model URL: "Download failed: 404 Not Found"; "Try again" failed again; "Install without it" installed, and the app offered the download.
+7. An interactive uninstall choosing "Remove the voice model".
+8. A fresh silent install, then a silent update that restarted the tray copy, and `install.ps1` refusing while the setup copy was installed.
+
+Afterwards the machine was put back as it was: the install.ps1 copy with Start with Windows on, and the settings file restored.
+
+Not tested: a real sign-in starting the Run entry, pinning to the taskbar, and the wizard in dark mode (the machine uses light mode). The clean-machine runs in Windows Sandbox (no Python) move to M10, which tests the draft release's installer there anyway. The user turns the feature on first (Turn Windows features on or off > Windows Sandbox, then restart).
+
+Notes for later:
+
+- PowerShell 5.1's `Start-Process -Wait` also waits for child processes, so it hangs after a silent update that restarts the tray app. Scripts and CI should wait on the setup process itself (`$p.WaitForExit()`).
+- The installer is unsigned; M8 explains the SmartScreen warning in the README.
 
 ### M8: CI and release pipeline (GitHub Actions)
 
 - `ci.yml`: on every push and pull request, run the tests on `windows-latest` with Python 3.10 and 3.13.
-- `release.yml`: on a `v*` tag, run the tests, build the exe, run `--self-test` against a cached model, build the installer, write `SHA256SUMS.txt`, attach the eSpeak NG source, and create a **draft** release with notes from `CHANGELOG.md`. Nothing is published automatically.
+- `release.yml`: on a `v*` tag, run the tests, build the exe, run `--self-test` against a cached model, build the installer, write `SHA256SUMS.txt`, attach the eSpeak NG source of the version `notices.ESPEAK_SOURCE` names (tag `1.52.0` today) and the phonemizer sdist (GPL-3.0, bundled as bytecode), and create a **draft** release with notes from `CHANGELOG.md`. Nothing is published automatically.
 - Pin actions to commit SHAs. Add Dependabot for pip and GitHub Actions.
 - Releases are unsigned at first; Windows SmartScreen will show "Windows protected your PC". The README explains this (More info > Run anyway) and gives the SHA-256. Free signing comes after launch (M11).
 

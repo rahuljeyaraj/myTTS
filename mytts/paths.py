@@ -19,6 +19,14 @@ def exe_path() -> Path:
     return Path(sys.executable).resolve()
 
 
+def installed_by_setup() -> bool:
+    """True for myTTS.exe installed by the setup program, which puts its uninstaller next to it.
+
+    A build in dist\\myTTS (or a copy of it elsewhere) has no uninstaller.
+    """
+    return frozen() and any(exe_path().parent.glob("unins*.exe"))
+
+
 def _local_appdata() -> Path:
     base = os.environ.get("LOCALAPPDATA")
     return Path(base) if base else Path.home() / "AppData" / "Local"

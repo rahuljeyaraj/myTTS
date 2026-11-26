@@ -81,8 +81,23 @@ def set_enabled(on: bool) -> None:
                 pass
 
 
+def is_install() -> bool:
+    """True for an installed copy: myTTS.exe installed by setup, or mytts installed into a venv.
+
+    A build in dist\\myTTS and a source checkout are not installs.
+    """
+    return paths.installed_by_setup() if paths.frozen() else _installed()
+
+
 def refresh() -> None:
-    """If enabled, point the entry at the current install (the exe, venv or checkout may have moved)."""
+    """If enabled, point the entry at this copy, when it is an installed one (it may have moved).
+
+    A dev build or a source checkout leaves the entry alone, so running one on a machine
+    with myTTS installed doesn't take over "Start with Windows". Turning the setting on
+    from such a copy still points the entry at it.
+    """
+    if not is_install():
+        return
     current = registered_command()
     if current is not None and current != command():
         set_enabled(True)
