@@ -81,8 +81,9 @@ QT_DROP_DLLS = {"opengl32sw.dll", "qt6pdf.dll", "qt6svg.dll", "qt6opengl.dll", "
 # sounddevice ships PortAudio for every platform; it loads libportaudio64bit.dll on 64-bit Windows.
 # The ASIO builds are only used when SD_ENABLE_ASIO is set, which myTTS doesn't do.
 PORTAUDIO_KEEP = {"libportaudio64bit.dll", "readme.md"}
-# OpenSSL 3 comes with PySide6 for Qt's TLS plugin, which is left out. Python's own _ssl
-# (used to download the voice model) links to OpenSSL 1.1, which stays.
+# PySide6 brings its own OpenSSL 3 (the -x64 names) for Qt's TLS plugin, which is left out.
+# Python's _ssl (used to download the voice model) links to Python's own libssl-3.dll and
+# libcrypto-3.dll, which have other names and stay.
 DROP_TOP = {"libcrypto-3-x64.dll", "libssl-3-x64.dll"}
 
 

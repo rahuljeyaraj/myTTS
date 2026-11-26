@@ -24,7 +24,7 @@
     Do not start myTTS when the install finishes.
 
 .PARAMETER Python
-    The python.exe to build the environment from: Python 3.10 to 3.13, 64-bit.
+    The python.exe to build the environment from: Python 3.11 to 3.13, 64-bit.
     By default the newest suitable Python registered in Windows is used.
 
 .EXAMPLE
@@ -54,7 +54,7 @@ $Shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'myTTS.lnk'
 $UninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\mytts'
 $SetupKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\mytts_is1'  # the installer's (AppId mytts)
 $AppId = 'mytts.app'  # must match APP_ID in mytts\ui\native.py
-$MinMinor, $MaxMinor = 10, 13  # kokoro-onnx supports Python 3.10 to 3.13
+$MinMinor, $MaxMinor = 11, 13  # 3.10 is end of life; kokoro-onnx does not support 3.14 yet
 
 function Write-Step([string]$Text) {
     Write-Host "==> $Text" -ForegroundColor Cyan
@@ -72,7 +72,7 @@ function Invoke-Checked {
 $Probe = "import struct, sys, sysconfig; print(sys.version_info[0], sys.version_info[1], struct.calcsize('P') * 8, int(bool(sysconfig.get_config_var('Py_GIL_DISABLED'))))"
 
 function Get-PythonInfo([string]$Exe) {
-    # The version of a usable interpreter (64-bit CPython 3.10 to 3.13, not free-threaded), or $null.
+    # The version of a usable interpreter (64-bit CPython 3.11 to 3.13, not free-threaded), or $null.
     if (-not $Exe -or -not (Test-Path -LiteralPath $Exe -PathType Leaf)) { return $null }
     $ErrorActionPreference = 'Continue'
     $out = & $Exe -c $Probe 2>$null
@@ -101,7 +101,7 @@ function Find-Python {
             }
         }
     }
-    $onPath = @(Get-Command python3.13, python3.12, python3.11, python3.10, python3, python `
+    $onPath = @(Get-Command python3.13, python3.12, python3.11, python3, python `
         -CommandType Application -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
     foreach ($group in @($registered), $onPath) {
         $found = @($group | Select-Object -Unique | ForEach-Object { Get-PythonInfo $_ } | Where-Object { $_ })
@@ -281,7 +281,7 @@ try {
             $base = Find-Python
             if (-not $base) {
                 throw ("myTTS needs 64-bit Python 3.$MinMinor to 3.$MaxMinor, and none was found. Install it with " +
-                    "'winget install Python.Python.3.12' or from python.org, then run install.ps1 again.")
+                    "'winget install Python.Python.3.13' or from python.org, then run install.ps1 again.")
             }
         }
         Write-Step "Creating the Python environment in $Venv (Python $($base.Version))"

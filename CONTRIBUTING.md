@@ -19,12 +19,12 @@ A security problem goes through a private report instead: see [SECURITY.md](SECU
 
 ## Setting up the code
 
-You need Windows 10 or 11 and 64-bit [Python 3.10](https://www.python.org/downloads/windows/) (the version releases are built with; 3.11 to 3.13 also work for development).
+You need Windows 10 or 11 and 64-bit [Python 3.13](https://www.python.org/downloads/windows/) (the version releases are built with; 3.11 and 3.12 also work for development).
 
 ```powershell
 git clone https://github.com/rahuljeyaraj/myTTS.git
 cd myTTS
-py -3.10 -m venv .venv
+py -3.13 -m venv .venv
 .venv\Scripts\python -m pip install -r packaging\requirements-lock.txt
 .venv\Scripts\python -m mytts download      # the voice model, 354 MB, once
 .venv\Scripts\python -m mytts               # run from the source folder
@@ -38,7 +38,7 @@ py -3.10 -m venv .venv
 .venv\Scripts\python -m pytest -q
 ```
 
-The tests need no audio device and no voice model: they use fake engines and Qt's offscreen platform. Please add a test for each bug you fix and each feature you add. CI runs the tests on Python 3.10 with the locked versions and on Python 3.13 with the newest allowed versions.
+The tests need no audio device and no voice model: they use fake engines and Qt's offscreen platform. Please add a test for each bug you fix and each feature you add. CI runs the tests on Python 3.13 with the locked versions and on Python 3.11 with the newest versions allowed there.
 
 To try a change in the real app, run it from the source folder as above. The installed copy keeps running independently if it uses a different hotkey; otherwise quit it first (`myTTS.exe quit`).
 

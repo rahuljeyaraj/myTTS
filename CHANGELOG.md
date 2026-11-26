@@ -4,6 +4,10 @@ All notable changes to myTTS are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-26
+
+The first public release.
+
 ### Added
 
 - A Windows installer, `myTTS-setup-<version>.exe`, that needs no Python or administrator rights. It downloads the voice model during setup, updates in place and replaces a copy installed with `install.ps1`.
@@ -14,6 +18,7 @@ All notable changes to myTTS are listed here. The format follows [Keep a Changel
 ### Changed
 
 - The app is now called myTTS wherever its name is shown.
+- Built with Python 3.13 (3.10 has reached its end of life), numpy 2.5 and onnxruntime 1.32. Running from source needs Python 3.11 to 3.13.
 
 ## [0.1.0] - 2026-11-14
 
@@ -21,5 +26,6 @@ All notable changes to myTTS are listed here. The format follows [Keep a Changel
 
 - The first version: offline Kokoro voices, the reader window with sentence highlighting, the read-selection hotkey, the tray icon, settings and `install.ps1`.
 
-[Unreleased]: https://github.com/rahuljeyaraj/myTTS/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/rahuljeyaraj/myTTS/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/rahuljeyaraj/myTTS/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/rahuljeyaraj/myTTS/releases/tag/v0.1.0

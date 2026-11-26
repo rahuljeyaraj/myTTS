@@ -317,7 +317,7 @@ Left for the user:
 
 ## Dev environment notes
 
-- Use `py -3.10 -m venv .venv`. kokoro-onnx requires Python below 3.14, and the default `python` on the dev machine belongs to PlatformIO, so don't use it.
+- The `.venv` uses Python 3.13.17 from the Python install manager (`pymanager install 3.13.17`; its python.exe is `%LOCALAPPDATA%\Python\pythoncore-3.13-64\python.exe`). kokoro-onnx requires Python below 3.14, and the default `python` on the dev machine belongs to PlatformIO, so don't use it.
 - Run the tests with `.venv\Scripts\python -m pytest -q`.
 - Processes started from the Claude Code shell ignore Ctrl+C (Windows passes that flag to child processes). To test Ctrl+C in a console program, call `SetConsoleCtrlHandler(None, False)` in it first.
 - `conhost.exe <command>` opens a classic console window even when Windows Terminal is the default terminal; `wt.exe -w new <command>` opens a separate Windows Terminal window.

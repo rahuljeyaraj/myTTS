@@ -114,12 +114,17 @@ def _url(d: metadata.Distribution) -> str:
 def _copy_license_files(d: metadata.Distribution, dest: Path) -> list[Path]:
     copied = []
     for f in d.files or []:
-        if not LICENSE_NAME.match(f.name) or f.name in SKIP_FILES or f.suffix in (".py", ".pyc"):
-            continue
         parts = f.parts
+        # Everything in .dist-info/licenses is a license file (PEP 639), whatever its name,
+        # for example numpy's dragon4_LICENSE.txt.
+        in_licenses = parts[0].endswith(".dist-info") and len(parts) > 2 and parts[1] == "licenses"
+        if not (in_licenses or LICENSE_NAME.match(f.name)) or f.name in SKIP_FILES or f.suffix in (".py", ".pyc"):
+            continue
         if parts[0].endswith(".dist-info"):
-            parts = parts[2:] if len(parts) > 2 and parts[1] == "licenses" else parts[1:]
+            parts = parts[2:] if in_licenses else parts[1:]
         target = dest / "-".join(parts)
+        if target in copied:  # numpy has numpy/ma/LICENSE both there and in the package
+            continue
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(d.locate_file(f), target)
         copied.append(target)
@@ -167,8 +172,8 @@ def collect(licenses: Path, modules: list[str], files: list[str], internal: Path
     py = Path(sys.base_prefix) / "LICENSE.txt"
     comps.append(Component(
         "Python", sys.version.split()[0], "PSF-2.0", "https://www.python.org/",
-        "the Python runtime (python310.dll and the standard library), with the libraries it bundles: "
-        "OpenSSL 1.1, libffi, bzip2, xz, zlib, expat and mpdecimal",
+        f"the Python runtime (python{sys.version_info[0]}{sys.version_info[1]}.dll and the standard "
+        "library), with the libraries it bundles: OpenSSL 3, libffi, bzip2, xz, zlib, expat and mpdecimal",
         [_copy(py, licenses, "Python/LICENSE.txt")],
     ))
     comps.append(Component(

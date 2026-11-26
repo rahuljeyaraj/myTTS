@@ -61,6 +61,20 @@ def test_python_version_file():
     assert low <= int(version.split(".")[1]) < high
 
 
+def test_python_ranges_agree():
+    # pyproject.toml, install.ps1 and CI name the same Python versions: the locked CI job runs
+    # the release's Python, and the other one the oldest supported version.
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    low, high = map(int, re.search(r'requires-python = ">=3\.(\d+),<3\.(\d+)"', text).groups())
+    ps1 = (ROOT / "install.ps1").read_text(encoding="ascii")
+    assert tuple(map(int, re.search(r"\$MinMinor, \$MaxMinor = (\d+), (\d+)", ps1).groups())) == (low, high - 1)
+    release_minor = ".".join((ROOT / "packaging" / ".python-version").read_text(encoding="ascii").split(".")[:2])
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    jobs = dict(re.findall(r'- python: "(3\.\d+)"\s+requirements: (.+)', ci))
+    assert jobs[release_minor] == "-r packaging/requirements-lock.txt"
+    assert f"3.{low}" in jobs and jobs[f"3.{low}"] != jobs[release_minor]
+
+
 def test_check_tag():
     assert release.check_tag(f"v{__version__}") == __version__
     for bad in (__version__, f"v{__version__}.1", "v0.0.0-test"):

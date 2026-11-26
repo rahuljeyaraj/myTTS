@@ -9,7 +9,7 @@ description = "Offline, minimalist read-aloud app for Windows: select text, pres
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.10,<3.14"  # kokoro-onnx does not support 3.14 yet
+requires-python = ">=3.11,<3.14"  # kokoro-onnx does not support 3.14 yet
 dependencies = [
     "kokoro-onnx>=0.6.1",
     "numpy>=2.0",

@@ -122,7 +122,7 @@ Windows doesn't let a normal app send keys to an app that runs as administrator,
 ### System requirements
 
 - Windows 10 or 11, 64-bit (x64).
-- About 500 MB of disk space: 140 MB for the app and 354 MB for the voices.
+- About 520 MB of disk space: 160 MB for the app and 354 MB for the voices.
 - Memory: myTTS uses about 0.8 to 1.5 GB while it runs, because the voice model stays loaded so speech starts at once.
 - Any recent CPU. On an ordinary laptop, speech is generated about four times faster than it is spoken, and starts about half a second to a second after the hotkey.
 - No graphics card, Python or internet connection needed (except for the voice download).
@@ -177,7 +177,7 @@ Both apps are free. They make different trade-offs, and FluentVoice Pro may suit
 ```powershell
 git clone https://github.com/rahuljeyaraj/myTTS.git
 cd myTTS
-py -3.10 -m venv .venv
+py -3.13 -m venv .venv
 .venv\Scripts\python -m pip install -r packaging\requirements-lock.txt
 .venv\Scripts\python -m mytts download        # the voice model, once
 .venv\Scripts\python -m mytts                 # run from the source folder
@@ -192,7 +192,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -SelfTest -Installe
 
 `-SelfTest` loads the voice model in the built exe and synthesizes one sentence.
 
-**Install from source** (for developers): `install.ps1` installs a checkout into a Python environment of its own (`%LOCALAPPDATA%\mytts\venv`) with a Start menu shortcut. It needs 64-bit Python 3.10 to 3.13. Options: `-Startup`, `-NoModel`, `-NoLaunch`, `-Python <path>`. It refuses to run while the setup version is installed, and setup replaces a copy installed this way. `uninstall.ps1` removes it (`-KeepModel`, `-RemoveSettings`).
+**Install from source** (for developers): `install.ps1` installs a checkout into a Python environment of its own (`%LOCALAPPDATA%\mytts\venv`) with a Start menu shortcut. It needs 64-bit Python 3.11 to 3.13. Options: `-Startup`, `-NoModel`, `-NoLaunch`, `-Python <path>`. It refuses to run while the setup version is installed, and setup replaces a copy installed this way. `uninstall.ps1` removes it (`-KeepModel`, `-RemoveSettings`).
 
 **Images:** `tools\screenshots.py` regenerates the screenshots, `tools\demo.py` records the demo GIF and an MP4 with sound (it takes over the screen for a minute), and `tools\social_preview.py` draws the icon and the social preview image.
 

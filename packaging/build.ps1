@@ -3,7 +3,7 @@
 Builds the self-contained myTTS.exe (no Python needed to run it) into dist\myTTS.
 
 .DESCRIPTION
-Uses the repository's .venv (Python 3.10 to 3.13), installs the pinned build tools into it,
+Uses the repository's .venv (Python 3.11 to 3.13), installs the pinned build tools into it,
 and runs PyInstaller with packaging\mytts.spec. The result is dist\myTTS\myTTS.exe with its
 _internal folder. The voice model is not bundled; it stays in %LOCALAPPDATA%\mytts\models.
 

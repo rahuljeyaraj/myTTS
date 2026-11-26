@@ -1,6 +1,6 @@
 # Third-party notices
 
-myTTS 0.1.0 for Windows (the installer and myTTS.exe) includes the software below. The license texts are in the `licenses` folder next to myTTS.exe (`%LOCALAPPDATA%\Programs\mytts\licenses` by default).
+myTTS 1.0.0 for Windows (the installer and myTTS.exe) includes the software below. The license texts are in the `licenses` folder next to myTTS.exe (`%LOCALAPPDATA%\Programs\mytts\licenses` by default).
 
 ## How myTTS is licensed
 
@@ -14,20 +14,19 @@ myTTS 0.1.0 for Windows (the installer and myTTS.exe) includes the software belo
 | Component | Version | License | What it is |
 |---|---|---|---|
 | [cffi](https://github.com/python-cffi/cffi) | 2.1.1 | MIT-0 | Python package |
-| [cloudpickle](https://github.com/cloudpipe/cloudpickle) | 3.1.2 | BSD-3-Clause | Python package |
+| [cloudpickle](https://github.com/cloudpipe/cloudpickle) | 3.1.3 | BSD-3-Clause | Python package |
 | [dlinfo](https://github.com/fphammerle/python-dlinfo) | 2.0.0 | MIT | Python package |
 | [espeakng-loader](https://github.com/thewh1teagle/espeakng-loader) | 0.2.4 | MIT | Python package |
 | [joblib](https://joblib.readthedocs.io) | 1.6.0 | BSD-3-Clause | Python package |
 | [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) | 0.6.1 | MIT | Python package |
-| [numpy](https://numpy.org) | 2.2.6 | BSD-3-Clause (bundled OpenBLAS: BSD-3-Clause; see its license files) | Python package |
-| [onnxruntime](https://onnxruntime.ai) | 1.23.2 | MIT License | Python package |
+| [numpy](https://numpy.org) | 2.5.5 | BSD-3-Clause (bundled OpenBLAS: BSD-3-Clause; see its license files) | Python package |
+| [onnxruntime](https://onnxruntime.ai) | 1.32.0 | MIT License | Python package |
 | [phonemizer](https://github.com/bootphon/phonemizer) | 3.6.0 | GPL-3.0-or-later | Python package |
-| [pyreadline3](https://github.com/pyreadline3/pyreadline3) | 3.5.6 | BSD | Python package |
 | [PySide6_Essentials](https://pyside.org) | 6.12.0 | LGPL-3.0-only (used under the LGPL) | Python package |
 | [shiboken6](https://pyside.org) | 6.12.0 | LGPL-3.0-only (used under the LGPL) | Python package |
 | [sounddevice](https://github.com/spatialaudio/python-sounddevice/) | 0.5.6 | MIT | Python package |
 | [typing_extensions](https://github.com/python/typing_extensions) | 4.16.0 | PSF-2.0 | Python package |
-| [Python](https://www.python.org/) | 3.10.11 | PSF-2.0 | the Python runtime (python310.dll and the standard library), with the libraries it bundles: OpenSSL 1.1, libffi, bzip2, xz, zlib, expat and mpdecimal |
+| [Python](https://www.python.org/) | 3.13.17 | PSF-2.0 | the Python runtime (python313.dll and the standard library), with the libraries it bundles: OpenSSL 3, libffi, bzip2, xz, zlib, expat and mpdecimal |
 | [Qt](https://www.qt.io/) | 6.12.0 | LGPL-3.0-only | Qt6Core, Qt6Gui, Qt6Network and Qt6Widgets and the Windows platform plugin, through PySide6 |
 | [eSpeak NG](https://github.com/espeak-ng/espeak-ng) | 1.52.0 | GPL-3.0-or-later | espeak-ng.dll and espeak-ng-data (turns text into phonemes), from espeakng-loader |
 | [PortAudio](https://www.portaudio.com/) | PortAudio V19.7.0-devel, revision unknown | MIT | libportaudio64bit.dll (audio output), from sounddevice |
@@ -41,7 +40,7 @@ myTTS 0.1.0 for Windows (the installer and myTTS.exe) includes the software belo
 - Project: https://github.com/python-cffi/cffi
 - License files: `cffi/LICENSE`
 
-### cloudpickle 3.1.2
+### cloudpickle 3.1.3
 
 - License: BSD-3-Clause
 - Project: https://github.com/cloudpipe/cloudpickle
@@ -71,13 +70,13 @@ myTTS 0.1.0 for Windows (the installer and myTTS.exe) includes the software belo
 - Project: https://github.com/thewh1teagle/kokoro-onnx
 - License files: `kokoro-onnx/LICENSE`
 
-### numpy 2.2.6
+### numpy 2.5.5
 
 - License: BSD-3-Clause (bundled OpenBLAS: BSD-3-Clause; see its license files)
 - Project: https://numpy.org
-- License files: `numpy/LICENSE.txt`, `numpy/numpy-_core-include-numpy-random-LICENSE.txt`, `numpy/numpy-ma-LICENSE`, `numpy/numpy-random-LICENSE.md`
+- License files: `numpy/LICENSE.txt`, `numpy/numpy-_core-include-numpy-libdivide-LICENSE.txt`, `numpy/numpy-_core-src-common-pythoncapi-compat-COPYING`, `numpy/numpy-_core-src-highway-LICENSE`, `numpy/numpy-_core-src-multiarray-dragon4_LICENSE.txt`, `numpy/numpy-_core-src-npysort-x86-simd-sort-LICENSE.md`, `numpy/numpy-_core-src-umath-svml-LICENSE`, `numpy/numpy-fft-pocketfft-LICENSE.md`, `numpy/numpy-linalg-lapack_lite-LICENSE.txt`, `numpy/numpy-ma-LICENSE`, `numpy/numpy-random-LICENSE.md`, `numpy/numpy-random-src-distributions-LICENSE.md`, `numpy/numpy-random-src-mt19937-LICENSE.md`, `numpy/numpy-random-src-pcg64-LICENSE.md`, `numpy/numpy-random-src-philox-LICENSE.md`, `numpy/numpy-random-src-sfc64-LICENSE.md`, `numpy/numpy-random-src-splitmix64-LICENSE.md`, `numpy/numpy-_core-include-numpy-random-LICENSE.txt`
 
-### onnxruntime 1.23.2
+### onnxruntime 1.32.0
 
 - License: MIT License
 - Project: https://onnxruntime.ai
@@ -88,12 +87,6 @@ myTTS 0.1.0 for Windows (the installer and myTTS.exe) includes the software belo
 - License: GPL-3.0-or-later
 - Project: https://github.com/bootphon/phonemizer
 - License files: `phonemizer/LICENSE`
-
-### pyreadline3 3.5.6
-
-- License: BSD
-- Project: https://github.com/pyreadline3/pyreadline3
-- License files: `pyreadline3/LICENSE.md`
 
 ### PySide6_Essentials 6.12.0
 
@@ -119,7 +112,7 @@ myTTS 0.1.0 for Windows (the installer and myTTS.exe) includes the software belo
 - Project: https://github.com/python/typing_extensions
 - License files: `typing_extensions/LICENSE`
 
-### Python 3.10.11
+### Python 3.13.17
 
 - License: PSF-2.0
 - Project: https://www.python.org/

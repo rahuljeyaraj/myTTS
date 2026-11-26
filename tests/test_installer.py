@@ -83,7 +83,7 @@ def test_script_compiles(tmp_path):
 def test_bundled_distributions():
     names = {d.metadata["Name"] for d in notices.bundled_distributions(
         ["numpy._core.multiarray", "phonemizer.backend", "json", "mytts.engine"],
-        ["PySide6/Qt6Core.dll", "python310.dll"],
+        ["PySide6/Qt6Core.dll", f"python3{sys.version_info[1]}.dll"],
     )}
     assert {"numpy", "phonemizer", "PySide6_Essentials"} <= names
     assert "pytest" not in names and "mytts" not in names
@@ -111,5 +111,10 @@ def test_licenses_folder(tmp_path):
         assert (licenses / name).is_file()
     # Every license file the notices name is in the folder.
     for listed in re.findall(r"^- License files: (.*)$", text, re.M):
-        for rel in re.findall(r"`([^`]+)`", listed):
+        rels = re.findall(r"`([^`]+)`", listed)
+        assert len(rels) == len(set(rels)), f"listed twice: {listed}"
+        for rel in rels:
             assert (licenses / rel).is_file(), rel
+    # Files in .dist-info/licenses count whatever their name (numpy's dragon4_LICENSE.txt).
+    numpy_files = {f.name for f in (licenses / "numpy").iterdir()}
+    assert any("dragon4" in n for n in numpy_files), numpy_files
