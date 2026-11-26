@@ -1,4 +1,4 @@
-"""Checks on install.ps1 and uninstall.ps1 that don't install anything."""
+"""Checks on install.ps1, uninstall.ps1 and packaging/build.ps1 that don't install or build anything."""
 
 import re
 import shutil
@@ -10,7 +10,7 @@ import pytest
 from mytts.ui import native
 
 ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS = [ROOT / "install.ps1", ROOT / "uninstall.ps1"]
+SCRIPTS = [ROOT / "install.ps1", ROOT / "uninstall.ps1", ROOT / "packaging" / "build.ps1"]
 
 
 @pytest.mark.parametrize("script", SCRIPTS, ids=lambda p: p.name)

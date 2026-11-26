@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from bisect import bisect_right
 from collections.abc import Sequence
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import DISPLAY_NAME
 from ..engine import DEFAULT_VOICE, Voice
 from ..player import MAX_SPEED, MIN_SPEED, Player, State
 from ..text import Segment, normalize, segment
@@ -337,7 +339,7 @@ class ModelNotice(QFrame):
         if error:
             self.label.setText(f"{error} The download resumes where it stopped.")
         else:
-            self.label.setText(f"mytts needs its offline voices ({mb}, downloaded once). "
+            self.label.setText(f"{DISPLAY_NAME} needs its offline voices ({mb}, downloaded once). "
                                "After that, nothing you read leaves this computer.")
         self.progress.hide()
         self._set_button("Retry" if error else "Download", primary=True)
@@ -377,7 +379,7 @@ class ReaderWindow(QWidget):
         self._model_missing = False
         self.player = player
         self.setObjectName("reader")
-        self.setWindowTitle("mytts")
+        self.setWindowTitle(DISPLAY_NAME)
         self.resize(820, 580)
         self.setMinimumSize(600, 320)
 
@@ -566,6 +568,7 @@ class ReaderWindow(QWidget):
         return self.pin_btn.isChecked()
 
     def show_error(self, message: str) -> None:
+        logging.getLogger("mytts.reader").warning("%s", message)
         self._error_until = time.monotonic() + 8
         self._show_status(message, error=True)
         self._error_timer.start(8000)

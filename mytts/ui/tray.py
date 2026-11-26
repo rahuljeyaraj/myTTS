@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
+from .. import DISPLAY_NAME
 from ..player import State
 from . import theme as themes
 from .icon import app_icon
@@ -68,7 +69,7 @@ class Tray(QObject):
         self._hotkey, self._hotkey_error = hotkey, error
         # QMenu shows the text after a tab in the shortcut column.
         self.read_action.setText(f"Read selection\t{hotkey}" if not error else "Read selection")
-        self.icon.setToolTip(f"mytts · {hotkey} reads the selection" if not error else f"mytts · {error}")
+        self.icon.setToolTip(f"{DISPLAY_NAME} · {hotkey} reads the selection" if not error else f"{DISPLAY_NAME} · {error}")
 
     def notify(self, title: str, message: str) -> None:
         if self.icon.isVisible() and QSystemTrayIcon.supportsMessages():

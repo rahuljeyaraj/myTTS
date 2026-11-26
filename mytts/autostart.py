@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from . import paths
+
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 VALUE_NAME = "mytts"
 
@@ -28,6 +30,8 @@ def _installed() -> bool:
 
 def command() -> str:
     """The command line that starts mytts in the tray."""
+    if paths.frozen():
+        return f'"{paths.exe_path()}" --tray'
     py = _gui_python()
     if _installed():
         return f'"{py}" -m mytts --tray'
@@ -78,7 +82,7 @@ def set_enabled(on: bool) -> None:
 
 
 def refresh() -> None:
-    """If enabled, point the entry at the current install (the venv or checkout may have moved)."""
+    """If enabled, point the entry at the current install (the exe, venv or checkout may have moved)."""
     current = registered_command()
     if current is not None and current != command():
         set_enabled(True)

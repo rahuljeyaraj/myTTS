@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 APP_NAME = "mytts"
+
+
+def frozen() -> bool:
+    """True in the self-contained build (myTTS.exe), False when run by a Python interpreter."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def exe_path() -> Path:
+    """myTTS.exe in the self-contained build."""
+    return Path(sys.executable).resolve()
 
 
 def _local_appdata() -> Path:
@@ -23,6 +34,23 @@ def models_dir() -> Path:
     return Path(override) if override else data_dir() / "models"
 
 
+def logs_dir() -> Path:
+    return data_dir() / "logs"
+
+
 def config_dir() -> Path:
     base = os.environ.get("APPDATA")
     return (Path(base) if base else Path.home() / "AppData" / "Roaming") / APP_NAME
+
+
+def licenses_dir() -> Path | None:
+    """The `licenses` folder next to myTTS.exe, if this build has one."""
+    if not frozen():
+        return None
+    d = exe_path().parent / "licenses"
+    return d if d.is_dir() else None
+
+
+def download_command() -> str:
+    """How to download the voice model from a terminal, for messages."""
+    return "myTTS.exe download" if frozen() else "python -m mytts download"

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import models
+from . import models, paths
 
 SAMPLE_RATE = 24_000
 DEFAULT_VOICE = "af_heart"
@@ -67,7 +67,7 @@ class Engine:
         absent = [p.name for p in (model_path, voices_path) if not p.is_file()]
         if absent:
             raise FileNotFoundError(
-                f"Voice model not found ({', '.join(absent)}). Run: python -m mytts download"
+                f"Voice model not found ({', '.join(absent)}). Run: {paths.download_command()}"
             )
         from kokoro_onnx import Kokoro  # heavy import (onnxruntime), keep it lazy
 

@@ -1,8 +1,8 @@
-"""The settings window: hotkey, clipboard, keep on top, start with Windows."""
+"""The settings window: hotkeys, clipboard, keep on top, start with Windows, and About."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF, QSize, Qt, QVariantAnimation, Signal
+from PySide6.QtCore import QRectF, QSize, Qt, QUrl, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import DISPLAY_NAME, PROJECT_URL, __version__, paths
 from .. import hotkey as hk
 from ..settings import HOTKEYS, Settings
 from . import theme as themes
@@ -170,6 +171,25 @@ _HOTKEY_HINTS = {
 }
 
 
+def licenses_url() -> str:
+    """The licenses folder of the installed exe, or the notices in the repository."""
+    local = paths.licenses_dir()
+    if local is not None:
+        return QUrl.fromLocalFile(str(local)).toString()
+    return f"{PROJECT_URL}/blob/main/THIRD_PARTY_NOTICES.md"
+
+
+def about_links(link_color: str) -> str:
+    style = f"color:{link_color}; text-decoration:none"
+    links = (
+        (PROJECT_URL, "Project page"),
+        (f"{PROJECT_URL}/blob/main/LICENSE", "MIT license"),
+        (licenses_url(), "Third-party licenses"),
+        (QUrl.fromLocalFile(str(paths.logs_dir())).toString(), "Log files"),
+    )
+    return " &nbsp;·&nbsp; ".join(f'<a href="{url}" style="{style}">{text}</a>' for url, text in links)
+
+
 class SettingsDialog(QDialog):
     hotkey_changed = Signal(str, str)  # action name, hotkey
     hotkey_recording = Signal(bool)
@@ -180,7 +200,7 @@ class SettingsDialog(QDialog):
     def __init__(self, settings: Settings, autostart: bool, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("settings")
-        self.setWindowTitle("mytts settings")
+        self.setWindowTitle(f"{DISPLAY_NAME} settings")
         self.setMinimumWidth(500)
 
         self.hotkey_edits: dict[str, HotkeyEdit] = {}
@@ -205,6 +225,13 @@ class SettingsDialog(QDialog):
         self.autostart_switch.setChecked(autostart)
         self.autostart_switch.toggled.connect(self.autostart_changed)
 
+        self.about_title = QLabel(f"{DISPLAY_NAME} {__version__}", objectName="heading")
+        self.about_links = QLabel(objectName="hint")
+        self.about_links.setTextFormat(Qt.TextFormat.RichText)
+        self.about_links.setOpenExternalLinks(True)
+        self.about_links.setWordWrap(True)
+        self.about_links.setText(about_links("#d9a55b"))
+
         close = QPushButton("Close", objectName="primary")
         close.clicked.connect(self.close)
 
@@ -223,6 +250,15 @@ class SettingsDialog(QDialog):
         layout.addLayout(self._row("Keep the reader on top", "Same as the pin button.", self.on_top_switch))
         layout.addLayout(self._row("Start with Windows", "Start in the tray when you sign in.",
                                    self.autostart_switch))
+        about = QVBoxLayout()
+        about.setSpacing(2)
+        about.addWidget(self.about_title)
+        tagline = QLabel("Offline text-to-speech. Nothing you read leaves this computer.", objectName="hint")
+        tagline.setWordWrap(True)
+        about.addWidget(tagline)
+        about.addWidget(self.about_links)
+        layout.addSpacing(4)
+        layout.addLayout(about)
         layout.addSpacing(4)
         buttons = QHBoxLayout()
         buttons.addStretch(1)
@@ -263,6 +299,7 @@ class SettingsDialog(QDialog):
         self.setStyleSheet(themes.stylesheet(t))
         for s in (self.restore_switch, self.on_top_switch, self.autostart_switch):
             s.set_theme(t)
+        self.about_links.setText(about_links(t.accent))
         themes.style_title_bar(int(self.winId()), t)
 
     def closeEvent(self, e) -> None:  # noqa: N802

@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Removes mytts installed by install.ps1.
+    Removes myTTS installed by install.ps1.
 
 .DESCRIPTION
-    Closes mytts if it is running, then removes its Start menu shortcut, its
+    Closes myTTS if it is running, then removes its Start menu shortcut, its
     Windows startup entry, its entry in Settings > Apps, its Python environment
     and the voice model. Your settings (%APPDATA%\mytts) are kept unless you add
     -RemoveSettings.
@@ -32,7 +32,7 @@ $Venv = Join-Path $Root 'venv'
 $VenvPython = Join-Path $Venv 'Scripts\python.exe'
 $Models = Join-Path $Root 'models'
 $Settings = Join-Path $env:APPDATA 'mytts'
-$Shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'mytts.lnk'
+$Shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'myTTS.lnk'
 $UninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\mytts'
 $RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 
@@ -72,7 +72,7 @@ Set-Location -LiteralPath $env:TEMP
 # 1. Close the installed copy if it is running (its files are locked while it runs).
 $procs = Get-InstalledProcess
 if ($procs) {
-    Write-Step 'Closing mytts'
+    Write-Step 'Closing myTTS'
     if (Test-Path $VenvPython) {
         $ErrorActionPreference = 'Continue'
         & $VenvPython -m mytts quit 2>$null | Out-Null
@@ -124,10 +124,10 @@ if ($RemoveSettings) {
 
 Write-Host ''
 if ($script:failed) {
-    Write-Host 'mytts was only partly removed; see the warnings above.' -ForegroundColor Yellow
+    Write-Host 'myTTS was only partly removed; see the warnings above.' -ForegroundColor Yellow
     exit 1
 } elseif ($script:removed) {
-    Write-Host 'mytts is uninstalled.' -ForegroundColor Green
+    Write-Host 'myTTS is uninstalled.' -ForegroundColor Green
 } else {
-    Write-Host 'mytts is not installed.'
+    Write-Host 'myTTS is not installed.'
 }

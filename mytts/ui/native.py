@@ -19,7 +19,7 @@ DWMWA_CLOAKED = 14
 
 # AppUserModelID. The Start menu shortcut from install.ps1 carries the same ID,
 # so Windows groups the window under that shortcut, a taskbar pin starts mytts
-# (not bare pythonw.exe), and tray notifications say "mytts" instead of "Python".
+# (not bare pythonw.exe), and tray notifications say "myTTS" instead of "Python".
 APP_ID = "mytts.app"
 
 

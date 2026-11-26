@@ -1,25 +1,25 @@
 <#
 .SYNOPSIS
-    Installs mytts for the current user.
+    Installs myTTS for the current user.
 
 .DESCRIPTION
     Creates a Python environment in %LOCALAPPDATA%\mytts\venv, installs mytts and
     its dependencies into it, downloads the voice model (354 MB, once), and adds
-    mytts to the Start menu and to Settings > Apps. No administrator rights are
+    myTTS to the Start menu and to Settings > Apps. No administrator rights are
     needed.
 
     Run it again after updating the source to update the installed copy. The
     voice model and your settings are kept.
 
 .PARAMETER Startup
-    Also start mytts in the notification area when you sign in to Windows.
-    (The same as "Start with Windows" in the mytts settings.)
+    Also start myTTS in the notification area when you sign in to Windows.
+    (The same as "Start with Windows" in the myTTS settings.)
 
 .PARAMETER NoModel
     Skip the voice model download. The reader window offers it on first start.
 
 .PARAMETER NoLaunch
-    Do not start mytts when the install finishes.
+    Do not start myTTS when the install finishes.
 
 .PARAMETER Python
     The python.exe to build the environment from: Python 3.10 to 3.13, 64-bit.
@@ -48,7 +48,7 @@ $Venv = Join-Path $Root 'venv'
 $VenvPython = Join-Path $Venv 'Scripts\python.exe'
 $VenvPythonw = Join-Path $Venv 'Scripts\pythonw.exe'
 $IconFile = Join-Path $Root 'mytts.ico'
-$Shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'mytts.lnk'
+$Shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'myTTS.lnk'
 $UninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\mytts'
 $AppId = 'mytts.app'  # must match APP_ID in mytts\ui\native.py
 $MinMinor, $MaxMinor = 10, 13  # kokoro-onnx supports Python 3.10 to 3.13
@@ -132,7 +132,7 @@ function Stop-Installed {
     # Files of a running copy are locked, so close it before changing the environment.
     $procs = Get-InstalledProcess
     if (-not $procs) { return }
-    Write-Step 'Closing the running copy of mytts'
+    Write-Step 'Closing the running copy of myTTS'
     if (Test-Path $VenvPython) {
         $ErrorActionPreference = 'Continue'
         & $VenvPython -m mytts quit 2>$null | Out-Null
@@ -254,14 +254,14 @@ try {
     $identity = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     $elevated = $identity.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if ($elevated) {
-        Write-Warning ('This PowerShell window runs as administrator. mytts is installed for the current ' +
+        Write-Warning ('This PowerShell window runs as administrator. myTTS is installed for the current ' +
             'user and does not need that. It will not be started from here, so it does not run elevated.')
     }
 
     # 1. A Python environment of its own.
     if ($Python) {
         $base = Get-PythonInfo $Python
-        if (-not $base) { throw "$Python is not a usable Python. mytts needs 64-bit Python 3.$MinMinor to 3.$MaxMinor." }
+        if (-not $base) { throw "$Python is not a usable Python. myTTS needs 64-bit Python 3.$MinMinor to 3.$MaxMinor." }
     }
     $venvOk = Get-PythonInfo $VenvPython
     $sameBase = -not $Python -or ((Get-VenvHome) -eq (Split-Path -Parent (Resolve-Path $Python).Path))
@@ -272,7 +272,7 @@ try {
         if (-not $Python) {
             $base = Find-Python
             if (-not $base) {
-                throw ("mytts needs 64-bit Python 3.$MinMinor to 3.$MaxMinor, and none was found. Install it with " +
+                throw ("myTTS needs 64-bit Python 3.$MinMinor to 3.$MaxMinor, and none was found. Install it with " +
                     "'winget install Python.Python.3.12' or from python.org, then run install.ps1 again.")
             }
         }
@@ -287,7 +287,7 @@ try {
     #    current source is installed even when the version number did not change.
     #    It is built from a copy: pip builds in place, and setuptools' build\ folder
     #    in the source would otherwise collect files that later builds still package.
-    Write-Step 'Installing mytts and its dependencies'
+    Write-Step 'Installing myTTS and its dependencies'
     Invoke-Checked $VenvPython -m pip install --quiet --disable-pip-version-check --upgrade pip
     Invoke-Checked $VenvPython -m pip install --disable-pip-version-check -r (Join-Path $Source 'requirements.txt')
     $stage = Join-Path ([IO.Path]::GetTempPath()) "mytts-install-$PID"
@@ -314,9 +314,11 @@ try {
     }
 
     # 4. Start menu shortcut, with the app icon and the app's AppUserModelID.
-    Write-Step 'Adding mytts to the Start menu'
+    Write-Step 'Adding myTTS to the Start menu'
     Invoke-Checked $VenvPython -c 'import sys; from mytts.ui.icon import save_ico; save_ico(sys.argv[1])' $IconFile
     if (-not ('MyttsSetup.Shortcut' -as [type])) { Add-Type -TypeDefinition $ShortcutCode }
+    # Remove it first: overwriting an old 'mytts.lnk' would keep the file name's old case.
+    Remove-Item -LiteralPath $Shortcut -Force -ErrorAction SilentlyContinue
     [MyttsSetup.Shortcut]::Create($Shortcut, $VenvPythonw, '-m mytts', $Root, $IconFile,
         'Read selected text aloud with natural offline voices', $AppId)
 
@@ -326,7 +328,7 @@ try {
     $sizeKb = [int]((Get-ChildItem -LiteralPath $Root -Recurse -File -Force | Measure-Object Length -Sum).Sum / 1KB)
     New-Item -Path $UninstallKey -Force | Out-Null
     $entry = @{
-        DisplayName     = 'mytts'
+        DisplayName     = 'myTTS'
         DisplayVersion  = $version
         DisplayIcon     = $IconFile
         InstallLocation = $Root
@@ -340,12 +342,12 @@ try {
 
     # 6. Start with Windows, if asked. The app writes the same Run entry from its settings.
     if ($Startup) {
-        Write-Step 'Starting mytts when you sign in to Windows'
+        Write-Step 'Starting myTTS when you sign in to Windows'
         Invoke-Checked $VenvPython -c 'from mytts import autostart; autostart.set_enabled(True)'
     }
 
     Write-Host ''
-    Write-Host "mytts $version is installed." -ForegroundColor Green
+    Write-Host "myTTS $version is installed." -ForegroundColor Green
     Write-Host 'Select text in any app and press the hotkey (Ctrl+Alt+Space unless you changed it).'
     Write-Host 'Start it from the Start menu; remove it from Settings > Apps or with uninstall.ps1.'
     if (-not $NoLaunch -and -not $elevated) {

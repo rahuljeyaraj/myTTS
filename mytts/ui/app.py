@@ -6,16 +6,17 @@ launch hands its request to the running copy and exits.
 
 from __future__ import annotations
 
+import logging
 import sys
 import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QByteArray, QObject, Qt, QtMsgType, QTimer, Signal, qInstallMessageHandler
 from PySide6.QtWidgets import QApplication
 
-from .. import __version__, autostart, models
+from .. import DISPLAY_NAME, __version__, autostart, models
 from ..capture import capture_selection
 from ..hotkey import GlobalHotkey
 from ..player import Player, State
@@ -32,6 +33,8 @@ from .tray import Tray
 SAVE_DELAY_MS = 600
 TRAY_FOCUS_SETTLE_S = 0.15  # after the tray menu gives the focus back to the previous app
 PROGRESS_INTERVAL_S = 0.1
+
+log = logging.getLogger("mytts.app")
 
 
 class App(QObject):
@@ -90,6 +93,7 @@ class App(QObject):
         w.notice.start_requested.connect(self.start_download)
         w.notice.cancel_requested.connect(self.cancel_download)
         self.player.state_changed.connect(self._update_tray)
+        self.player.state_changed.connect(lambda st: log.info("Player %s", getattr(st, "name", st)))
         self._captured.connect(self._on_captured, Qt.ConnectionType.QueuedConnection)
         self._download_progress.connect(w.show_download_progress, Qt.ConnectionType.QueuedConnection)
         self._download_done.connect(self._on_download_done, Qt.ConnectionType.QueuedConnection)
@@ -115,6 +119,8 @@ class App(QObject):
         if self.tray is not None:
             self.tray.show()
         todo = self._missing()
+        log.info("Started%s; voice model %s", " in the tray" if not show else "",
+                 "missing" if todo else "present")
         if todo:
             self.window.offer_download(sum(f.size for f in todo))
             show = True  # nothing works until the voices are there
@@ -128,6 +134,7 @@ class App(QObject):
             QTimer.singleShot(0, lambda: self.window.load_text(text))
 
     def quit(self) -> None:
+        log.info("Quit")
         self._quitting = True
         self.window.hide_on_close = False
         QApplication.instance().quit()
@@ -167,7 +174,7 @@ class App(QObject):
         self.save_settings()
         if not self.settings.tray_hint_shown and self.tray is not None:
             self.settings.tray_hint_shown = True
-            self.tray.notify("mytts is still running",
+            self.tray.notify(f"{DISPLAY_NAME} is still running",
                              f"Press {self.settings.hotkey} to read selected text, or click the tray icon.")
             self.save_settings()
 
@@ -220,7 +227,9 @@ class App(QObject):
         try:
             text = self._capture(restore=restore)
         except Exception:
+            log.exception("Copying the selection failed")
             text = None
+        log.info("Read selection: %s", f"{len(text)} characters" if text is not None else "nothing selected")
         self._captured.emit(text)
 
     def _on_captured(self, text: str | None) -> None:
@@ -240,6 +249,8 @@ class App(QObject):
     # ---------------------------------------------------------------- hotkey
 
     def _hotkey_status(self, name: str, hotkey: str, error: str | None) -> None:
+        if error:
+            log.warning("Hotkey %s (%s): %s", name, hotkey, error)
         if self.tray is not None and name == "read":
             self.tray.set_hotkey(hotkey, error)
         if self.dialog is not None:
@@ -346,6 +357,7 @@ class App(QObject):
         except models.DownloadCancelled:
             result = "cancelled"
         except Exception as e:
+            log.exception("Voice model download failed")
             result = str(e) or e.__class__.__name__
         self._download_done.emit(result)
 
@@ -372,18 +384,25 @@ def quit_running(timeout: float = 10.0, name: str | None = None) -> int:
 
     _app = QCoreApplication.instance() or QCoreApplication(sys.argv[:1])
     if not is_running(name):
-        print("mytts is not running.")
+        print(f"{DISPLAY_NAME} is not running.")
         return 1
     if not send({"cmd": "quit"}, name):
-        print("mytts is running but did not respond.", file=sys.stderr)
+        print(f"{DISPLAY_NAME} is running but did not respond.", file=sys.stderr)
         return 1
     if not wait_until_gone(name, timeout):
-        print(f"mytts did not exit within {timeout:.0f} s.", file=sys.stderr)
+        print(f"{DISPLAY_NAME} did not exit within {timeout:.0f} s.", file=sys.stderr)
         return 1
     return 0
 
 
+def _qt_message(mode: QtMsgType, _context, message: str) -> None:
+    """Qt's own warnings (a failed tray icon, a missing plugin) go to the log file."""
+    if mode in (QtMsgType.QtWarningMsg, QtMsgType.QtCriticalMsg, QtMsgType.QtFatalMsg):
+        logging.getLogger("mytts.qt").warning("%s", message)
+
+
 def run(text: str | None = None, tray: bool = False) -> int:
+    qInstallMessageHandler(_qt_message)
     native.set_app_id()  # before the first window, so the taskbar groups it under the shortcut
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("mytts")
@@ -397,7 +416,7 @@ def run(text: str | None = None, tray: bool = False) -> int:
         msg = {"cmd": "open", "text": text} if text else {"cmd": "tray" if tray else "show"}
         if send(msg):
             return 0
-        print("mytts is already running but did not respond.", file=sys.stderr)
+        print(f"{DISPLAY_NAME} is already running but did not respond.", file=sys.stderr)
         return 1
 
     settings = Settings.load()

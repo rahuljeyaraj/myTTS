@@ -1,0 +1,4 @@
+# Pinned so that a build can be repeated. Install into the Python 3.10 to 3.13 venv
+# together with ../requirements.txt.
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10

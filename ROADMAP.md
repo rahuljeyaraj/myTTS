@@ -174,31 +174,51 @@ Result (2026-11-26): **nothing private was found, so no history rewrite was need
 
 M10 runs this scan again over the commits made after it. To repeat the scan: `gitleaks git . --log-opts=--all --redact`.
 
-### M6: Self-contained build (no Python needed)
+### M6: Self-contained build (done)
 
-- PyInstaller, one-folder mode (not one-file: it starts faster, triggers fewer antivirus false positives, and keeps the Qt DLLs replaceable as the LGPL requires). A spec file `packaging/mytts.spec`. Fall back to Nuitka only if Defender flags the PyInstaller build.
-- Collect the data that is loaded at run time: the `espeakng_loader` DLL and `espeak-ng-data`, the `kokoro_onnx` config, the `phonemizer` files and the onnxruntime DLLs. Leave out unused Qt modules, translations and plugins to keep the size down.
-- `mytts.exe` is a windowed program with the app icon and Windows version info (product name, version, copyright).
-- Code changes for the frozen build:
-  - `autostart.py`: when `sys.frozen`, the Run command is `"<install>\mytts.exe" --tray`.
-  - Logging to `%LOCALAPPDATA%\mytts\logs\mytts.log` (rotating), because a windowed exe has no console. An unhandled exception is written to the log and shown in a short error dialog.
-  - Settings get an About section: version, a link to the project, the license and third-party notices.
-  - `mytts.exe --version`, and `mytts.exe --self-test` (loads the engine and synthesizes one sentence without playing it), for CI.
-- Test it in Windows Sandbox (built into Windows 11 Pro), which is a clean Windows with no Python: start, read a selection, hotkeys, tray, start with Windows.
-- Record the size, start-up time and time to first speech, compared with the Python install.
+`packaging\build.ps1` builds `dist\myTTS\myTTS.exe`, which runs without Python. Result (2026-11-26):
+
+- **PyInstaller 6.22.3, one-folder mode** (pinned in `packaging/requirements-build.txt`), spec `packaging/mytts.spec`, entry script `packaging/launcher.py` (PyInstaller needs a script; `mytts/__main__.py` uses relative imports). Defender (`MpCmdRun -Scan -ScanType 3`) found no threats in the build, so Nuitka was not needed.
+- **What the spec adds by hand:** `espeak-ng.dll` (loaded by path with ctypes) and `espeak-ng-data`, `kokoro_onnx/config.json`, and the `kokoro-onnx` package metadata (it logs its own version through `importlib.metadata`). The contrib hooks already handle onnxruntime and sounddevice (PortAudio). phonemizer's `share` folder is for its festival and segments backends and is not needed. At run time phonemizer copies `espeak-ng.dll` to a temp folder per process, as it does under Python; the copy is removed when the app exits normally.
+- **Left out:** all Qt plugins except `platforms/qwindows.dll`, the Qt translations, `opengl32sw.dll` and unused Qt DLLs, Qt's OpenSSL 3 (only its TLS plugin used it; Python's `_ssl`, used for the model download, links to OpenSSL 1.1, which stays), and `tkinter`, `sympy`, `mpmath`, `setuptools`, `pygments`, `coloredlogs` and the onnxruntime tool packages. Only `QtCore`, `QtGui`, `QtWidgets` and `QtNetwork` (for `QLocalServer`) remain.
+- **The exe:** windowed, with the app icon (written by `save_ico` at build time) and version info: product name myTTS, file and product version from `mytts.__version__`, the copyright line from `LICENSE`, original file name `myTTS.exe`.
+- **Display name myTTS** (decision 2): window title, settings title, tray tooltip and notification, the download notice, `--version`, the install scripts' messages, the Start menu shortcut `myTTS.lnk` (deleted first, so an old `mytts.lnk` takes the new case), the Settings > Apps name, and the README prose. `mytts.DISPLAY_NAME` and `mytts.PROJECT_URL` hold them. Identifiers stay `mytts`.
+- **Code changes:**
+  - `paths.frozen()`, `exe_path()`, `logs_dir()`, `licenses_dir()` (the `licenses` folder next to the exe, which M7 adds) and `download_command()`.
+  - `autostart.command()` in the exe is `"<path>\myTTS.exe" --tray`. As before, starting any copy re-points an enabled Run entry at itself (`autostart.refresh()`).
+  - `mytts/logs.py`: every start logs to `%LOCALAPPDATA%\mytts\logs\mytts.log` (1 MB, 2 backups; `crash.log` next to it receives faulthandler dumps of native crashes). It logs the version and command (never the text being read), app start, the selection length, player state changes, hotkey and download errors, errors shown in the reader, and Qt's own warnings (`qInstallMessageHandler`). phonemizer's per-sentence "words count mismatch" warning is silenced. An unhandled exception on the GUI thread is logged and shown in a dialog that names the log file (one at a time, never under the offscreen test platform); in other threads it is only logged. PyInstaller's own error dialog stays on for failures before logging starts.
+  - Console output: a windowed exe has no stdout or stderr. For the commands that print (`--version`, `--help`, `--self-test`, `quit`, `download`, `voices`, `say`) it attaches to the console of the terminal it was started from (`AttachConsole`). The reader never attaches, because closing that terminal would then close the app. Redirected output works too: bash, `cmd /c` and `Start-Process -Wait -RedirectStandardOutput` all get the output and the exit code. Without a console, output goes to `os.devnull`.
+  - `--self-test`: loads PortAudio, Qt (with the real platform plugin) and the voice model, synthesizes one sentence without playing it, and fails if the audio is shorter than 0.5 s or silent. It prints timed steps and logs them.
+  - Settings has an About section: name and version, a tagline, and links to the project page, the MIT license, the third-party licenses (the local `licenses` folder when there is one, otherwise `THIRD_PARTY_NOTICES.md` in the repository, which M9 adds) and the log folder.
+- Tests: 113 in total. New: frozen paths and Run command, the log file and both exception hooks, the error dialog skipped offscreen, console streams never left as `None`, `--self-test` passing, and failing on silent audio (fake engine), the About section, the spec compiling, and `build.ps1` being ASCII and parsing.
+
+Measured on the dev machine:
+
+| | Python install (`install.ps1`) | myTTS.exe |
+|---|---|---|
+| Size on disk, without the 354 MB model | 426 MB venv, plus an installed Python | 141 MB, 501 files |
+| Window visible after launch (warm, 3 runs) | 0.66 to 0.79 s | 0.58 to 0.69 s |
+| Launch with text to first speech (warm, source run for Python) | 2.8 s | 2.5 s |
+
+With the app running, the hotkey over a Notepad selection started speech 0.99 s after the key press (the copy itself took 36 ms). The first launch of a fresh build took 1.97 s (cold disk cache and Defender's first scan). A build takes 65 to 75 s. `--self-test` takes 3.0 to 3.5 s warm (model load 1.7 s, first sentence 1.2 s).
+
+How it was tested: **Windows Sandbox is not enabled on the dev machine** (turning on the Windows feature needs administrator rights and a restart), so the clean-machine test ran on the dev machine instead. The exe was started with `PATH` set to the Windows folders only and every `PYTHON*`, `QT_*` and `VIRTUAL_ENV` variable removed. None of the 148 modules it loaded came from outside the build folder and `C:\Windows`, except phonemizer's temp copy of the bundled `espeak-ng.dll`. Then, on the real desktop: the reader window opened; Ctrl+Shift+X over a Notepad selection (injected key presses) read it, Ctrl+Shift+Right moved on and Ctrl+Shift+X again paused, as the log shows; the tray icon was found through UI Automation in the hidden-icons flyout with the tooltip "myTTS · Ctrl+Shift+X reads the selection"; `myTTS.exe quit` closed it in about 1 s; and the Run entry the app wrote (`"...\myTTS.exe" --tray`), started from `C:\Windows\System32`, started it in the tray with no window. The Run entry and the settings were put back to the Python install afterwards.
+
+Still to do, in M7: the same checks in Windows Sandbox, together with the installer tests. The user turns the feature on first (Turn Windows features on or off > Windows Sandbox, then restart).
 
 ### M7: Windows installer
 
 - Inno Setup 6 (free; VS Code uses it). One script, `packaging/mytts.iss`.
 - Installs per user with no administrator rights (`PrivilegesRequired=lowest`) to `%LOCALAPPDATA%\Programs\mytts`. It creates the Start menu shortcut with the AppUserModelID `mytts.app` (Inno supports this natively), an entry in Settings > Apps, and optional tasks for a desktop shortcut and "Start with Windows". Setup ends with "Launch mytts".
 - The model goes to the existing `%LOCALAPPDATA%\mytts\models`, so an existing download is reused. How it gets there depends on decision 1.
+- It packages `dist\myTTS` from `packaging\build.ps1` and runs `myTTS.exe quit` before replacing files. The app re-points an enabled Run entry at whichever copy starts, so a dev build run on a machine with the installed app moves it; consider ignoring builds outside the install folder there.
 - Upgrades: installing a newer version closes the running copy (`mytts.exe quit`) and keeps the model and settings. If an install from `install.ps1` is found, it is removed first, keeping the model and settings.
 - Uninstall: closes the app, removes the program, the shortcuts and the Run entry. It asks whether to remove the voice model too (354 MB); settings are kept.
 - License compliance, because the installer bundles third-party code:
   - A `licenses\` folder in the install with the MIT license, Apache-2.0 (Kokoro), GPL-3.0 (eSpeak NG), LGPL-3.0 (Qt / PySide6), and `THIRD_PARTY_NOTICES.md` generated from the frozen build's packages.
   - eSpeak NG is GPL-3.0, so the installer as a whole is distributed under GPL-3.0 terms. The mytts source stays MIT (which is compatible with the GPL). Each release carries the source of the exact eSpeak NG version it bundles, and the README says this plainly.
   - The Qt DLLs stay as separate, replaceable files (LGPL).
-- Test in Windows Sandbox: a fresh install, an upgrade over the previous build, an upgrade over an `install.ps1` install, and uninstalling with and without the model.
+- Test in Windows Sandbox: a fresh install, an upgrade over the previous build, an upgrade over an `install.ps1` install, and uninstalling with and without the model. Also the M6 checks of the exe itself (start, read a selection, hotkeys, tray, start with Windows), which ran on the dev machine because Sandbox was not enabled.
 - `install.ps1` stays, documented as "install from source" for developers.
 
 ### M8: CI and release pipeline (GitHub Actions)
