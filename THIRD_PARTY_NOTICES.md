@@ -1,6 +1,6 @@
 # Third-party notices
 
-myTTS 1.0.0 for Windows (the installer and myTTS.exe) includes the software below. The license texts are in the `licenses` folder next to myTTS.exe (`%LOCALAPPDATA%\Programs\mytts\licenses` by default).
+myTTS 1.0.1 for Windows (the installer and myTTS.exe) includes the software below. The license texts are in the `licenses` folder next to myTTS.exe (`%LOCALAPPDATA%\Programs\mytts\licenses` by default).
 
 ## How myTTS is licensed
 

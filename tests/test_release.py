@@ -118,6 +118,13 @@ def test_changelog_has_the_current_version():
     assert release.changelog_section(text, __version__)
 
 
+def test_notices_name_the_current_version():
+    # The release build regenerates THIRD_PARTY_NOTICES.md and stops if it differs from the
+    # committed copy, so a version bump must update its first line too.
+    text = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+    assert f"myTTS {__version__} for Windows" in text
+
+
 def test_sums_and_notes(tmp_path):
     a = tmp_path / f"myTTS-setup-{__version__}.exe"
     a.write_bytes(b"setup")
