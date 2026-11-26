@@ -156,20 +156,23 @@ Goal: release mytts for free on GitHub as a Windows installer (`mytts-setup-<ver
 3. **The version (decided): `1.0.0`** for the first public release.
 4. **The comparison with FluentVoice Pro (open):** see M9. The user may add more issues they noticed. Each one is checked against the current version first.
 
-### M5: Private data audit of the whole history
+### M5: Private data audit of the whole history (done)
 
 Making the repo public publishes every commit, tag and file that ever existed, not only the current tree.
 
-- Already checked (2026-11-26): there are 6 commits, one branch (`main`) and one tag (`v0.1.0`). Every author and committer is `rahuljeyaraj <19166091+rahuljeyaraj@users.noreply.github.com>`, so no personal email is in the commit metadata.
-- List every path that was ever committed (`git log --all --name-only`), including deleted files, and read anything unexpected.
-- Scan every blob in every commit with gitleaks (`gitleaks git`) for tokens, keys and passwords.
-- Grep all history for personal data: the real email, phone numbers, `C:\Users\…` paths, machine and network names, IP addresses, the GCM token pattern (`gho_`, `ghp_`), and the contents of `.env` or credential files.
-- Look at each binary: `docs/*.png` (only sample text, no taskbar, notifications or other windows), and strip PNG metadata.
-- Read every commit message in full.
-- Check the GitHub side too, because it is published along with the code: releases, Actions runs and logs, issues, the wiki, deploy keys, webhooks and secrets (REST API).
-- Add `*.code-workspace` to `.gitignore`. The untracked `mytts.code-workspace` holds no private data, but it doesn't belong in the repo.
-- If anything turns up: rotate it first if it is a secret, then rewrite history with `git filter-repo`, force-push, and recreate the `v0.1.0` tag. This is safe now, while the repo is private and has one user.
-- Record the result in this file: what was scanned and what was found.
+Result (2026-11-26): **nothing private was found, so no history rewrite was needed.** What was scanned, as of commit `43b885e`:
+
+- **Refs:** 8 commits, one branch (`main`), one annotated tag (`v0.1.0`), no stashes. The remote has the same two refs and nothing else.
+- **Identity:** every author, committer and the tagger is `rahuljeyaraj <19166091+rahuljeyaraj@users.noreply.github.com>`. The timestamps carry the `+0530` time zone, as all git commits do; that was accepted.
+- **Paths:** `git log --all --name-only` lists only the 45 files in the current tree. No file was ever deleted, so there is no hidden history.
+- **Secrets:** `gitleaks git --log-opts=--all` (gitleaks 8.30.1, installed with winget): 8 commits, no leaks. A `gitleaks dir` scan of the working folder found 9 false positives, all in third-party packages inside the ignored `.venv`.
+- **Personal data:** `git grep` over every revision for the real email, `gmail`, the real name, any email domain, `C:\Users` and `/c/Users` paths, the short home path `RAHULJ~1`, the machine name, IPv4 addresses, phone-number shapes, `gho_`/`ghp_`/`github_pat_` tokens, `password`/`secret`/`token`/`api key`/private keys/`.env`/`credential`. The only hits are the public GitHub username (LICENSE, README clone URL), this roadmap's own wording, COM GUIDs in `install.ps1` and the word "token" in `text.py`.
+- **Binaries:** the three `docs/*.png` (one version each in history) show only the app window with sample text. Their chunks are `IHDR`, `pHYs`, `IDAT` and `IEND`: no text, EXIF or time metadata, so nothing to strip.
+- **Commit messages:** all 8 read in full. They describe the code only.
+- **GitHub (REST API):** the repo is private. Releases, Actions runs and artifacts, issues, pull requests, commit comments, deploy keys, webhooks, environments, deployments, Actions/Dependabot/Codespaces secrets and variables are all empty. The wiki and Pages are off. The only collaborator is the owner, with no pending invitations.
+- `*.code-workspace` is now in `.gitignore`.
+
+M10 runs this scan again over the commits made after it. To repeat the scan: `gitleaks git . --log-opts=--all --redact`.
 
 ### M6: Self-contained build (no Python needed)
 

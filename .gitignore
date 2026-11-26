@@ -9,3 +9,4 @@ dist/
 *.bin
 *.part
 *.wav
+*.code-workspace
