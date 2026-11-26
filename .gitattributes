@@ -1,0 +1,10 @@
+# Text files are stored with LF line endings.
+* text=auto eol=lf
+
+# Binary files: never convert or diff.
+*.png binary
+*.gif binary
+*.mp4 binary
+*.ico binary
+*.onnx binary
+*.bin binary

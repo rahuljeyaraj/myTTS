@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in myTTS doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. For a security problem, please don't use this form: see [SECURITY.md](https://github.com/rahuljeyaraj/myTTS/blob/main/SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: myTTS version
+      description: Settings > About shows it, or run `myTTS.exe --version`.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+      description: Run `winver` and copy the version and OS build.
+      placeholder: "Windows 11 24H2, OS build 26100.4061"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install myTTS?
+      options:
+        - The installer (myTTS-setup.exe)
+        - install.ps1 from a source checkout
+        - Running from source (python -m mytts)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead? If it is about reading a selection, say which app you selected the text in.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Select a paragraph in ...
+        2. Press Ctrl+Alt+Space
+        3. ...
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        The end of `%LOCALAPPDATA%\mytts\logs\mytts.log` (paste the path into File Explorer's address bar to open the folder, or use the Log files link in Settings). The log records what the app did, never the text you read, but please look it over before pasting.
+      render: text

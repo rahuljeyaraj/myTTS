@@ -272,25 +272,32 @@ Notes for later:
 - The installer is still unsigned; free signing (SignPath) is in M11.
 - Workflow runs on a private repo use Actions minutes (Windows counts double); a release run is about 4 minutes.
 
-### M9: A professional repo
+### M9: A professional repo (done)
 
-- README, rewritten from the user's point of view:
-  - At the top: the icon, the name, a one-line tagline, badges (latest release, downloads, CI, license, Windows 10/11), a demo GIF, and a big **Download for Windows** link to the latest installer.
-  - Then: features, screenshots, hotkeys, settings, and an FAQ (the SmartScreen warning, privacy and offline use, languages, system requirements, where files live, how to uninstall).
-  - **Background / Inspiration**: mytts was inspired by [FluentVoice Pro](https://github.com/nickotmazgin/fluentvoice-pro) by Nick Otmazgin, and its voice goal by Google's voices in the "Read Aloud" Chrome extension. Credit them warmly, and link them.
-  - **What mytts does differently**, as a factual table, not a list of complaints. Each row is checked by hand against the current FluentVoice Pro (v1.6.7 on 2026-11-26) in Windows Sandbox, and the table says which version was compared. What its README shows today:
-    - Highlighting the sentence being read, and clicking a sentence to jump there: its README does not mention either. This is the main difference.
-    - A status while audio is being prepared: its README now describes one ("Connecting… → Speaking — voice • part 2/7 • 1:05 / 3:10"). If the user saw no such status, that was likely an older version. Leave this row out unless the check shows a real difference.
-    - Offline voices: it now has Kokoro and Piper as well, but it uses online Microsoft voices first. mytts is offline only, with no network use after the model download.
-    - Rows the user wants to add go through the same check. Claims about another person's project must be accurate and polite: it is free software and its author may read the page.
-  - Credits and licenses, building from source, contributing.
-- New files: `CHANGELOG.md` (Keep a Changelog), `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant), `SECURITY.md` (private vulnerability reporting), `THIRD_PARTY_NOTICES.md`, `.github/ISSUE_TEMPLATE/` (bug report with version, Windows build and log location; feature request), a pull request template, `.editorconfig`, `.gitattributes`.
-- A demo GIF for the README (select text in a browser, press the hotkey, watch the highlight move). Also an MP4 with sound for LinkedIn. A social preview image (1280×640) in the icon's style.
-- Repo settings through the REST API: description, topics (`text-to-speech`, `tts`, `windows`, `offline`, `kokoro`, `read-aloud`, `accessibility`, `pyside6`), homepage set to the latest release, Issues on, Wiki and Projects off. The social preview image is uploaded by hand in Settings, because there is no API for it.
+Result (2026-11-26):
+
+- **README** rewritten for people who use the app: the icon, name and tagline, badges (latest release, downloads, CI, license, Windows 10/11), the demo GIF and a **Download myTTS for Windows** link to the latest release at the top. Then features, screenshots, install, hotkeys, the reader window, settings, an FAQ (SmartScreen and checking the SHA-256, privacy, offline use, languages, elevated windows, system requirements, where files live, complete uninstall, the command line), Background, the comparison, Development, Credits and License. The command line section now uses the installed `myTTS.exe` (the `Get-Clipboard | open -` example was dropped: stdin of the windowed exe is not tested). Developer material (install.ps1, builds, releases) moved to Development.
+- **Background:** credits FluentVoice Pro by Nick Otmazgin and the Read Aloud Chrome extension's Google voices, with links (both checked: HTTP 200).
+- **Comparison table:** against FluentVoice Pro **1.6.7** (released 2026-11-08) **as its README describes it**, which the table says. Rows: following along (sentence highlight and click to jump vs. a status line with part and time), voices, network, hotkey, install channels, Windows on ARM. It says where FluentVoice Pro does more (languages, online voices, install channels, ARM64). The status-while-preparing row was left out, as planned: its README describes one. **Not done: the hands-on check in Windows Sandbox**, which is still not enabled. Running someone else's app on the dev machine was not an option. M10 does it.
+- **New files:** `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, the official text fetched from its repository; the contact is GitHub's private reporting form, so no email address is published), `CONTRIBUTING.md`, `SECURITY.md` (private vulnerability reporting, scope, what is by design), `.github/ISSUE_TEMPLATE/` (a bug report form with version, `winver` build, install type and the log location; a feature request form; a link to private security reports), `.github/pull_request_template.md`, `.editorconfig` and `.gitattributes` (`* text=auto eol=lf`, media and model files binary; renormalizing changed no existing file). `CHANGELOG.md` and `THIRD_PARTY_NOTICES.md` already existed (M7, M8).
+- **Images:** `tools/screenshots.py` regenerated the three screenshots (the old ones showed the name "mytts" and an older settings window). At 125 % scaling with several monitors, `QScreen.grabWindow` was off by a row or two and caught the window behind, so the tools now grab exact physical pixels with GDI (`tools/screengrab.py`). The screenshot tool also covers the screen with a plain window in the theme's colour and uses window sizes that are whole device pixels.
+- **Demo:** `tools/demo.py` drives the real app: an Edge app window (fresh profile in a temp folder: no tabs, account or bookmarks) shows a sample page; the pointer drags across two paragraphs; Ctrl+Alt+Space is sent (key caps are shown on screen); the reader reads; a click on sentence 5 jumps there; the hotkey pauses. A copy of myTTS with default settings runs beside the installed one (which uses another hotkey). The player's output goes to a recorder that pulls it in real time, so the sound track is exactly what was played and lines up with the video; nothing is heard. 15 fps lossless capture with the real pointer drawn in, then ffmpeg: `docs/demo.gif` (1024x576, 12 fps, 27 s, 0.6 MB) and `docs/demo.mp4` (1600x900, H.264 and AAC, 27 s, 1.0 MB; for LinkedIn). ffmpeg came from `pip install imageio-ffmpeg` in a scratch venv; it is not a project dependency. The tool takes over the main monitor for about a minute.
+- **Social preview:** `tools/social_preview.py` draws `docs/social-preview.png` (1280x640, the icon and dark theme) and `docs/icon.png` for the README.
+- **Repo settings (REST API):** renamed `mytts` to **`myTTS`** (decision 2; GitHub redirects the old URL, and `origin` now uses the new one), the description, the eight topics, homepage `https://github.com/rahuljeyaraj/myTTS/releases/latest`, Issues on, Wiki and Projects off.
+- Tests: 156 in total. New `tests/test_repo.py`: the community files exist, every local link, image and `#anchor` in the Markdown files resolves, media is binary in git, the issue forms have their keys, and the Code of Conduct has a contact.
+
+Measured: the running app (install.ps1 copy, model loaded, idle) uses 760 MB working set and 1.5 GB committed memory; the README says "about 0.8 to 1.5 GB".
+
+Left for the user:
+
+- **Upload `docs/social-preview.png` by hand:** Settings > General > Social preview > Edit > Upload an image. There is no API for it.
+- **Code of Conduct contact:** reports go through the private vulnerability reporting form, which M11 turns on. To use an email address instead, replace that sentence in `CODE_OF_CONDUCT.md`.
+- Still open from M8: the Python 3.13 decision before 1.0.0. Dependabot #1 is closed; #2 (a pip group update) is open.
 
 ### M10: Pre-launch review (then stop for the user)
 
 - Build `v1.0.0` through the release pipeline, as a draft release.
+- Check the comparison table by hand against the then-current FluentVoice Pro in Windows Sandbox (M9 compared it with the 1.6.7 README only). If the version changed, update the table and the version it names.
 - In Windows Sandbox, download the installer from the draft release and run through the full test list.
 - Run the M5 scan again over everything committed since.
 - Check every README link, image and badge.

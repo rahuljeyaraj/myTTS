@@ -19,7 +19,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from PySide6.QtCore import QEventLoop, QRect, QTimer  # noqa: E402
+from PySide6.QtCore import QEventLoop, QPoint, QRect, Qt, QTimer  # noqa: E402
+from PySide6.QtGui import QColor, QPainter  # noqa: E402
 from PySide6.QtWidgets import QApplication, QWidget  # noqa: E402
 
 import numpy as np  # noqa: E402
@@ -32,6 +33,9 @@ from mytts.ui import native  # noqa: E402
 from mytts.ui import theme as themes  # noqa: E402
 from mytts.ui.app import App  # noqa: E402
 from mytts.ui.icon import app_icon  # noqa: E402
+
+sys.path.insert(0, str(ROOT / "tools"))
+from screengrab import grab  # noqa: E402
 
 OUT = ROOT / "docs"
 SAMPLE = """Morning on the harbour
@@ -89,6 +93,32 @@ def wait_until(predicate, timeout_ms: int = 20_000) -> None:
     raise TimeoutError("the reader did not get ready in time")
 
 
+class Backdrop(QWidget):
+    """A plain screen-sized window behind the one being captured, in its background
+    colour, so no other window can show at its edges (at 125 % scaling a window's
+    frame can be a pixel or two larger than what Qt paints)."""
+
+    def __init__(self, screen):
+        super().__init__(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+                         | Qt.WindowType.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.color = QColor(themes.DARK.bg)
+        self.setGeometry(screen.geometry())
+
+    def set_color(self, color: str) -> None:
+        self.color = QColor(color)
+        self.update()
+
+    def paintEvent(self, _e) -> None:  # noqa: N802
+        QPainter(self).fillRect(self.rect(), self.color)
+
+
+def snap(n: float) -> int:
+    """Round to a multiple of 4 logical pixels, which is a whole number of device
+    pixels at 100, 125, 150 and 200 % scaling."""
+    return 4 * round(n / 4)
+
+
 def capture(widget: QWidget, name: str) -> None:
     """Screen-grab the window, title bar included, without the drop shadow."""
     hwnd = wintypes.HWND(int(widget.winId()))
@@ -99,12 +129,9 @@ def capture(widget: QWidget, name: str) -> None:
     native.bring_to_front(int(widget.winId()))  # an active title bar
     wait(600)  # let DWM redraw the frame
 
-    r = wintypes.RECT()
+    r = wintypes.RECT()  # physical pixels, without the invisible resize border
     dwm.DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, ctypes.byref(r), ctypes.sizeof(r))
-    screen = widget.screen()
-    dpr, origin = screen.devicePixelRatio(), screen.geometry().topLeft()
-    x, y = r.left / dpr - origin.x(), r.top / dpr - origin.y()
-    shot = screen.grabWindow(0, round(x), round(y), round((r.right - r.left) / dpr), round((r.bottom - r.top) / dpr))
+    shot = grab(r.left, r.top, r.right - r.left, r.bottom - r.top)
     OUT.mkdir(exist_ok=True)
     shot.save(str(OUT / name))
     themes.set_topmost(int(widget.winId()), False)
@@ -127,7 +154,10 @@ def main() -> int:
         controller = App(Settings(), Path(tmp) / "settings.json", player=player, use_tray=False, use_hotkey=False)
         window = controller.window
         controller.start(show=True)
-        window.setGeometry(QRect(160, 80, 780, 690))
+        backdrop = Backdrop(window.screen())
+        backdrop.show()
+        themes.set_topmost(int(backdrop.winId()), True)  # above every other app; capture() raises the window above it
+        window.setGeometry(QRect(160, 60, 780, 720))
         wait_until(lambda: bool(player.voices))
         window.load_text(SAMPLE, play=False)
         player.play(READING)
@@ -141,15 +171,19 @@ def main() -> int:
 
         capture(window, "reader-dark.png")
         window.apply_theme("sepia")
+        backdrop.set_color(themes.THEMES["sepia"].bg)
         capture(window, "reader-sepia.png")
+        backdrop.set_color(themes.DARK.bg)
         window.apply_theme("dark")
 
         controller.show_settings()
         dialog = controller.dialog
-        dialog.move(window.geometry().center() - dialog.rect().center())
+        c = window.geometry().center() - dialog.rect().center()
+        dialog.move(QPoint(snap(c.x()), snap(c.y())))
         capture(dialog, "settings.png")
 
         controller.shutdown()
+        backdrop.close()
     return 0
 
 
