@@ -11,7 +11,13 @@ An offline, minimalist read-aloud app for Windows. Select text in any window, pr
 
 ## Install
 
-You need Windows 10 or 11 (64-bit). Run `myTTS-setup-<version>.exe`. It doesn't need administrator rights or Python. Until the first public release, build the installer yourself (see [Development](#development)).
+You need Windows 10 or 11 (64-bit). Download `myTTS-setup-<version>.exe` from the [latest release](https://github.com/rahuljeyaraj/myTTS/releases/latest) and run it. It doesn't need administrator rights or Python. Until the first public release, build the installer yourself (see [Development](#development)).
+
+The installer isn't code-signed yet, so Windows SmartScreen may show **"Windows protected your PC"**. Click **More info**, then **Run anyway**. To check that the download is the one the release published, compare its SHA-256 with the one in the release notes and in `SHA256SUMS.txt`:
+
+```powershell
+Get-FileHash .\myTTS-setup-<version>.exe
+```
 
 Setup:
 
@@ -132,6 +138,10 @@ powershell -ExecutionPolicy Bypass -File packaging\build.ps1 -SelfTest
 It installs the pinned PyInstaller into `.venv` and writes `dist\myTTS\myTTS.exe` with its `_internal` and `licenses` folders. `-SelfTest` then loads the voice model and synthesizes one sentence. The app writes a log to `%LOCALAPPDATA%\mytts\logs\mytts.log`.
 
 Add `-Installer` to also build `dist\myTTS-setup-<version>.exe` with [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`), from `packaging\mytts.iss`.
+
+### Releases
+
+GitHub Actions runs the tests on every push to `main` and every pull request (`.github/workflows/ci.yml`). Pushing a tag `v<version>` that matches `mytts.__version__` runs `.github/workflows/release.yml`: it installs the exact versions in `packaging\requirements-lock.txt`, runs the tests, builds and self-tests `myTTS.exe`, builds the installer, and creates a **draft** release with the installer, `SHA256SUMS.txt`, the eSpeak NG and phonemizer source (both GPL-3.0) and notes from the version's section in [CHANGELOG.md](CHANGELOG.md). A draft is published by hand after review. To try the pipeline without a tag, run the Release workflow by hand: it uploads the same files as a workflow artifact.
 
 [ROADMAP.md](ROADMAP.md) describes how the app is built, milestone by milestone, with measurements and known limits.
 

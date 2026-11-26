@@ -6,7 +6,7 @@ myTTS 0.1.0 for Windows (the installer and myTTS.exe) includes the software belo
 
 - The myTTS source code is MIT licensed (`myTTS-LICENSE.txt`, and https://github.com/rahuljeyaraj/myTTS).
 - The program as distributed includes eSpeak NG and phonemizer, which are GPL-3.0-or-later. So the installer and myTTS.exe as a whole are distributed under the terms of the GNU GPL version 3 (`GPL-3.0.txt`). The MIT license is compatible with the GPL, and each part keeps its own license.
-- The complete source of myTTS for each release is the matching tag in the repository. The eSpeak NG source of the version it bundles is attached to each release.
+- The complete source of myTTS for each release is the matching tag in the repository. The source of the eSpeak NG and phonemizer versions it bundles is attached to each release.
 - The voice model (Kokoro-82M, Apache-2.0) is not part of the installer: setup downloads it.
 
 ## Components

@@ -1,0 +1,145 @@
+name: Release
+
+# On a v* tag: test, build myTTS.exe, run its self-test, build the installer, collect the GPL
+# sources and SHA256SUMS.txt, and create a DRAFT release. Nothing is published automatically:
+# the draft is reviewed and published by hand.
+#
+# Run it by hand (Actions > Release > Run workflow) to test the pipeline without a tag: it builds
+# everything and uploads it as a workflow artifact. With "draft" ticked it also creates a draft
+# release on a throwaway tag name (test-<run number>), to be deleted afterwards.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: Also create a test draft release (tag test-<run number>; delete it afterwards)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      MYTTS_MODELS_DIR: ${{ github.workspace }}\.models
+      INNO_VERSION: 6.7.3
+      INNO_URL: https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe
+      INNO_SHA256: 9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No pip cache here: a release installs from PyPI.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.10.11"
+
+      - name: Check the tag against the version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: python packaging/release.py check-tag "$env:GITHUB_REF_NAME"
+
+      - name: Install the pinned packages
+        run: |
+          python -m pip install --disable-pip-version-check -r packaging/requirements-lock.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m pip check
+
+      - name: Test
+        run: python -m pytest -q
+
+      - name: Voice model cache key
+        id: model
+        run: |
+          $key = python -c "from mytts import models; print('kokoro-model-' + '-'.join(f.sha256[:16] for f in models.REQUIRED))"
+          if ($LASTEXITCODE -or -not $key) { throw 'Could not read the model hashes' }
+          "key=$key" >> $env:GITHUB_OUTPUT
+
+      # The files are checked against their SHA-256 below, so a cached copy can't be swapped.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.MYTTS_MODELS_DIR }}
+          key: ${{ steps.model.outputs.key }}
+
+      - name: Voice model
+        run: |
+          python -m mytts download --verify | Tee-Object -Variable out
+          if ($LASTEXITCODE) { throw 'The voice model download failed' }
+          if ($out -match 'MISMATCH') { throw 'The voice model failed its SHA-256 check' }
+
+      - name: Install Inno Setup ${{ env.INNO_VERSION }}
+        run: |
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          Invoke-WebRequest $env:INNO_URL -OutFile $setup -UseBasicParsing
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash
+          if ($hash -ne $env:INNO_SHA256) { throw "Inno Setup download has SHA-256 $hash" }
+          $dir = Join-Path $env:RUNNER_TEMP 'InnoSetup'
+          $p = Start-Process $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/CURRENTUSER', "/DIR=$dir" -PassThru
+          $p.WaitForExit()
+          if ($p.ExitCode) { throw "Inno Setup install failed (exit code $($p.ExitCode))" }
+          "ISCC=$(Join-Path $dir 'ISCC.exe')" >> $env:GITHUB_ENV
+
+      - name: Build myTTS.exe, self-test it, build the installer
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build.ps1 -Python (Get-Command python).Source -SelfTest -Installer -Iscc $env:ISCC
+          if ($LASTEXITCODE) { throw "build.ps1 failed (exit code $LASTEXITCODE)" }
+
+      # The build rewrites THIRD_PARTY_NOTICES.md; the tagged source must already say the same.
+      - name: Check THIRD_PARTY_NOTICES.md is current
+        run: |
+          git diff --exit-code -- THIRD_PARTY_NOTICES.md
+          if ($LASTEXITCODE) { throw 'THIRD_PARTY_NOTICES.md differs from what this build bundles: build locally and commit it' }
+
+      - name: Collect the release files
+        run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { @('--tag', $env:GITHUB_REF_NAME) } else { @() }
+          python packaging/release.py assets --out dist/release @tag
+          if ($LASTEXITCODE) { throw "release.py failed (exit code $LASTEXITCODE)" }
+          Get-Content dist/release/notes.md
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: dist/release
+          if-no-files-found: error
+          retention-days: 14
+
+  draft:
+    name: Draft release
+    needs: build
+    if: github.ref_type == 'tag' || inputs.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          IS_TAG: ${{ github.ref_type == 'tag' }}
+        run: |
+          set -euo pipefail
+          version=$(ls release/assets/myTTS-setup-*.exe | sed -E 's/.*myTTS-setup-(.+)\.exe$/\1/')
+          if [ "$IS_TAG" = true ]; then
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+              --title "myTTS $version" --notes-file release/notes.md release/assets/*
+          else
+            gh release create "test-$GITHUB_RUN_NUMBER" --draft --target "$GITHUB_SHA" \
+              --title "myTTS $version (test run $GITHUB_RUN_NUMBER, delete me)" --notes-file release/notes.md release/assets/*
+          fi

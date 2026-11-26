@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # The exact versions a release is built with. requirements.txt and pyproject.toml keep their
+  # ranges and are left alone; the Python 3.13 CI job tests the newest versions they allow.
+  - package-ecosystem: pip
+    directory: /packaging
+    schedule:
+      interval: weekly
+    groups:
+      pip:
+        patterns: ["*"]
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
