@@ -9,7 +9,9 @@
 ; - Closes a running myTTS first (myTTS.exe quit). If myTTS was installed from source with
 ;   install.ps1, removes that copy (its uninstall.ps1 -KeepModel), keeping the model and settings.
 ; - Downloads the voice model to %LOCALAPPDATA%\mytts\models unless it is already there, and
-;   checks its SHA-256. Without internet access, it installs anyway: the app offers the download.
+;   checks its SHA-256. A failed download is tried twice more after a short wait; if it still
+;   fails, the user can try again or install without it (a silent install goes on without it),
+;   and the app offers the download.
 ; - Start menu shortcut (with the app's AppUserModelID), optional desktop shortcut, optional
 ;   "Start with Windows" (the same Run entry the app's setting writes).
 ; Uninstall closes the app, removes the program, shortcuts, Run entry and logs, and asks whether
@@ -98,6 +100,8 @@ const
   RunKey = 'Software\Microsoft\Windows\CurrentVersion\Run';
   RunValue = 'mytts';
   SourceInstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\mytts';
+  DownloadTries = 3;  { a failed download is tried again twice by itself }
+  RetryDelay = 3;     { seconds before the first retry; the second waits twice as long }
 
 var
   DownloadPage: TDownloadWizardPage;
@@ -165,20 +169,100 @@ begin
   end;
 end;
 
+{ Inno's text for a failed download, without the "Internal error: Worker thread terminated
+  unexpectedly with exception:" in front of the real reason. }
+function DownloadDetails(const Raw: String): String;
+var
+  P: Integer;
+begin
+  Result := Raw;
+  P := Pos('exception: ', Result);
+  if P > 0 then
+    Result := Copy(Result, P + Length('exception: '), MaxInt);
+  Result := AddPeriod(Trim(Result));
+end;
+
+{ What went wrong, in plain words. }
+function PlainDownloadError(const Details: String): String;
+var
+  HttpFailed: String;
+begin
+  HttpFailed := SetupMessage(msgErrorDownloadFailed);  { "Download failed: %1 %2" (the HTTP status) }
+  HttpFailed := Copy(HttpFailed, 1, Pos('%1', HttpFailed) - 1);
+  if Pos('hash', Lowercase(Details)) > 0 then
+    Result := 'A downloaded file arrived incomplete or damaged: it did not match its checksum.'
+  else if (HttpFailed <> '') and (Pos(HttpFailed, Details) > 0) then
+    Result := 'The download server did not send the file.'
+  else
+    Result := 'The connection to the download server failed or was cut off.';
+end;
+
+{ Waits before trying again, counting down on the download page. Returns False if the user
+  pressed Stop download meanwhile. }
+function WaitBeforeRetry(const Seconds, NextTry: Integer): Boolean;
+var
+  Ms: Integer;
+begin
+  Ms := Seconds * 1000;
+  while (Ms > 0) and not DownloadPage.AbortedByUser do begin
+    DownloadPage.SetText('The download was interrupted.',
+      Format('Trying again in %d s (try %d of %d)...', [(Ms + 999) div 1000, NextTry, DownloadTries]));
+    Sleep(250);
+    Ms := Ms - 250;
+  end;
+  Result := not DownloadPage.AbortedByUser;
+end;
+
+{ One round: up to DownloadTries tries, waiting a little longer before each retry. Files that
+  were already downloaded to the temporary folder with the right hash are not fetched again.
+  Returns '' on success, otherwise Inno's text for the last failure. }
+function TryDownload(var Stopped: Boolean): String;
+var
+  Attempt: Integer;
+begin
+  Stopped := False;
+  Attempt := 1;
+  while True do begin
+    Result := '';
+    try
+      DownloadPage.Download;
+    except
+      Result := GetExceptionMessage;
+    end;
+    if Result = '' then
+      exit;
+    Stopped := DownloadPage.AbortedByUser;
+    if Stopped then begin
+      Log('Voice model download stopped by the user');
+      exit;
+    end;
+    Log(Format('Voice model download failed (try %d of %d): %s', [Attempt, DownloadTries, Result]));
+    if Attempt >= DownloadTries then
+      exit;
+    Attempt := Attempt + 1;
+    if not WaitBeforeRetry(RetryDelay * (Attempt - 1), Attempt) then begin
+      Stopped := True;
+      exit;
+    end;
+  end;
+end;
+
 // Downloads the missing model files into the temporary folder; CurStepChanged moves them
-// into place. On failure the user can try again or install without the model.
+// into place. Retries by itself first (a silent install too); then the user can try again or
+// install without the model.
 function DownloadModel: Boolean;
 var
-  Failure: String;
+  Failure, Details, InstallLater: String;
+  Stopped: Boolean;
   Answer: Integer;
   Done: Boolean;
 begin
   Result := True;
+  InstallLater := 'You can also install {#AppName} now and download the voice model later from its window.';
   Done := ModelPresent;
   if Done then
     Log('The voice model is already in ' + ModelsDir);
   while not Done do begin
-    Failure := '';
     DownloadPage.Clear;
     if not ModelFilePresent('{#ModelName}', {#ModelSize}) then
       DownloadPage.Add('{#ModelBaseUrl}/{#ModelName}', '{#ModelName}', '{#ModelSha256}');
@@ -186,29 +270,26 @@ begin
       DownloadPage.Add('{#ModelBaseUrl}/{#VoicesName}', '{#VoicesName}', '{#VoicesSha256}');
     DownloadPage.Show;
     try
-      try
-        DownloadPage.Download;
-      except
-        if DownloadPage.AbortedByUser then
-          Failure := 'The download was stopped.'
-        else
-          Failure := AddPeriod(GetExceptionMessage);
-      end;
+      Failure := TryDownload(Stopped);
     finally
       DownloadPage.Hide;
     end;
     if Failure = '' then
       Done := True
-    else begin
-      Log('Voice model download failed: ' + Failure);
-      if WizardSilent then
-        Done := True  { install anyway; the app offers the download }
+    else if WizardSilent then begin
+      Log('Installing without the voice model; the app offers the download');
+      Done := True;
+    end else begin
+      if Stopped then
+        Failure := 'The download was stopped.' + #13#10#13#10 + InstallLater
       else begin
-        Answer := TaskDialogMsgBox('The voice model could not be downloaded',
-          Failure + #13#10#13#10 + 'You can install {#AppName} now and download the voice model later from its window.',
-          mbError, MB_RETRYCANCEL, ['Try again', 'Install without it'], 0);
-        Done := Answer <> IDRETRY;
+        Details := DownloadDetails(Failure);
+        Failure := PlainDownloadError(Details) + ' Check that this computer is connected to the internet, then try again.';
+        Failure := Failure + #13#10#13#10 + InstallLater + #13#10#13#10 + 'Details: ' + Details;
       end;
+      Answer := TaskDialogMsgBox('The voice model could not be downloaded', Failure,
+        mbError, MB_RETRYCANCEL, ['Try again', 'Install without it'], 0);
+      Done := Answer <> IDRETRY;
     end;
   end;
 end;

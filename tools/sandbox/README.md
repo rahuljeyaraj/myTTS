@@ -5,7 +5,7 @@ Tests a release installer on a fresh Windows with no Python and no Visual C++ ru
 ## Set up
 
 1. Make `build\sandbox\in`, `build\sandbox\in\queue`, `build\sandbox\out` and `build\sandbox\extra` (`build` is ignored by git).
-2. Copy `agent.ps1`, `test.ps1`, `wizard.ps1`, `ui.ps1` and `textwin.ps1` to `build\sandbox\in`.
+2. Copy `agent.ps1`, `test.ps1`, `wizard.ps1`, `retry.ps1`, `ui.ps1` and `textwin.ps1` to `build\sandbox\in`.
 3. Put the release files (the installer and `SHA256SUMS.txt`) in a folder under `in`, for example `in\draft`.
 4. Copy `mytts.wsb` to `build\sandbox` and replace `C:\path\to\myTTS` with the checkout's folder.
 
@@ -36,6 +36,20 @@ if (-not (Test-Path C:\out\wizard-restarted.flag)) {
 ```
 
 Its results go to `out\wizard-<part>-<time>.txt`, with a screenshot of each page. It does not handle the "could not be downloaded" dialog: if it shows, press a button on it with a job of its own (see below).
+
+`retry.ps1` tests how setup retries a failed voice model download, with a small HTTP server inside the Sandbox that cuts off the downloads it is told to. It needs an installer that downloads from that server and the model files next to it:
+
+```powershell
+# On the host, from the checkout:
+New-Item -ItemType Directory -Force build\retry-assets, build\sandbox\in\retry\models
+(Get-Content build\installer\defines.iss) -replace '^#define ModelBaseUrl .*', '#define ModelBaseUrl "http://127.0.0.1:8765/m"' |
+    Set-Content build\retry-assets\defines.iss
+& ISCC.exe /Q "/DAssetsDir=$PWD\build\retry-assets" "/O$PWD\build\sandbox\in\retry" /FmyTTS-setup-localserver packaging\mytts.iss
+Copy-Item $env:LOCALAPPDATA\mytts\models\* build\sandbox\in\retry\models
+'& C:\in\retry.ps1' | Set-Content build\sandbox\in\queue\50-retry.ps1
+```
+
+It runs three scenarios (`-Scenarios once, always, wizard`): a silent install where one download is cut off once, a silent install where it always is, and the wizard, where it checks the countdown and the dialog and then presses "Try again". Results go to `out\retry-<time>.txt`.
 
 For other checks, dot-source `ui.ps1` in a job. It lists windows and their controls, clicks buttons by their text and saves screenshots to `out`.
 

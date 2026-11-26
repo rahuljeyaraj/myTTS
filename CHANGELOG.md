@@ -10,7 +10,7 @@ The first public release.
 
 ### Added
 
-- A Windows installer, `myTTS-setup-<version>.exe`, that needs no Python or administrator rights. It downloads the voice model during setup, updates in place and replaces a copy installed with `install.ps1`.
+- A Windows installer, `myTTS-setup-<version>.exe`, that needs no Python or administrator rights. It downloads the voice model during setup (trying again by itself if a download is cut off), updates in place and replaces a copy installed with `install.ps1`.
 - A self-contained `myTTS.exe`, with a log file, a `--self-test` command and an About section in Settings.
 - The read hotkey pauses and resumes; new hotkeys for the next and previous sentence.
 - Playback follows the Windows default speaker when it changes, for example when Bluetooth headphones connect.
