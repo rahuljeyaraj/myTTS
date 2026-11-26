@@ -13,6 +13,7 @@ $Models = Join-Path $env:LOCALAPPDATA 'mytts\models'
 $Logs = Join-Path $env:LOCALAPPDATA 'mytts\logs'
 $AppLog = Join-Path $Logs 'mytts.log'
 if (-not $Setup) { $Setup = (Get-ChildItem $In -Filter 'myTTS-setup-*.exe' | Select-Object -First 1).FullName }
+$Version = if ((Split-Path $Setup -Leaf) -match '^myTTS-setup-(\d+\.\d+\.\d+)\.exe$') { $Matches[1] } else { '' }  # the version setup should install
 $RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $AppsKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\mytts_is1'
 $StartLnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'myTTS.lnk'
@@ -128,13 +129,13 @@ foreach ($step in $Steps) {
             Check 'unins000.exe next to it' { Test-Path (Join-Path $App 'unins000.exe') }
             Check 'licenses folder' { (Test-Path (Join-Path $App 'licenses\THIRD_PARTY_NOTICES.md')) }
             $k = Get-ItemProperty $AppsKey -ErrorAction SilentlyContinue
-            Check 'Settings > Apps entry myTTS 1.0.0' { $k -and $k.DisplayName -eq 'myTTS' -and $k.DisplayVersion -eq '1.0.0' }
+            Check "Settings > Apps entry myTTS $Version" { $Version -and $k -and $k.DisplayName -eq 'myTTS' -and $k.DisplayVersion -eq $Version }
             Check 'Start menu shortcut' { Test-Path $StartLnk }
             Check 'no desktop shortcut by default' { -not (Test-Path $DesktopLnk) }
             Check 'no Run entry by default' { -not (Get-ItemProperty $RunKey -Name mytts -ErrorAction SilentlyContinue) }
             Check 'voice model downloaded by setup' { (Test-Path "$Models\kokoro-v1.0.onnx") -and (Test-Path "$Models\voices-v1.0.bin") }
             $r = Invoke-Exe $Exe @('--version') 30
-            Check "--version prints 1.0.0 ($($r.Out))" { $r.Code -eq 0 -and $r.Out -match '1\.0\.0' }
+            Check "--version prints $Version ($($r.Out))" { $Version -and $r.Code -eq 0 -and $r.Out -match [regex]::Escape($Version) }
             $r = Invoke-Exe $Exe @('download', '--verify') 300
             Check "download --verify ($($r.Seconds) s)" { $r.Code -eq 0 }
             $r = Invoke-Exe $Exe @('--self-test') 120

@@ -1,6 +1,6 @@
 """myTTS: an offline, minimalist read-aloud app for Windows."""
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 # What people see. Identifiers (package, command, folders, app id, mutex) stay lowercase "mytts".
 DISPLAY_NAME = "myTTS"

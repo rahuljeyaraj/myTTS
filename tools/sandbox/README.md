@@ -16,7 +16,7 @@ Tests a release installer on a fresh Windows with no Python and no Visual C++ ru
 Double-click `build\sandbox\mytts.wsb`. At sign-in the Sandbox starts `agent.ps1`, which runs each `in\queue\<name>.ps1` once and writes `out\<name>.txt`, then `out\<name>.done` when it ends. To run the whole test, put a one-line job in the queue:
 
 ```powershell
-'& C:\in\test.ps1 -Setup C:\in\draft\myTTS-setup-1.0.0.exe' | Set-Content build\sandbox\in\queue\01-test.ps1
+'& C:\in\test.ps1 -Setup C:\in\draft\myTTS-setup-1.0.1.exe' | Set-Content build\sandbox\in\queue\01-test.ps1
 ```
 
 The results go to `out\results-<time>.txt`, one `PASS` or `FAIL` line per check. `-Steps` runs only some steps: `env`, `hashes`, `install` (silent, with the model download), `checks` (files, Apps entry, shortcuts, `--version`, `download --verify`, `--self-test`), `tray` (start, modules loaded from outside the app, memory), `hotkey`, `update` (silent, while running), `uninstall` (right after the update) and `tasks` (`/TASKS=desktopicon,startup`, then a plain silent update keeps them).
@@ -24,7 +24,7 @@ The results go to `out\results-<time>.txt`, one `PASS` or `FAIL` line per check.
 `wizard.ps1` goes through the setup wizard and the uninstaller with real clicks, in three parts. `-Part install` installs with the wizard's defaults (the folder page, the model download, Finish starts myTTS). `-Part update` runs the wizard again, ticks "Start myTTS when I sign in" and restarts the Sandbox. `-Part signin`, after the restart, checks that Explorer started myTTS with `--tray` from the Run entry, then uninstalls from the uninstaller's window and answers "Remove the voice model". A whole run, as one job:
 
 ```powershell
-$s = 'C:\in\draft\myTTS-setup-1.0.0.exe'
+$s = 'C:\in\draft\myTTS-setup-1.0.1.exe'
 if (-not (Test-Path C:\out\wizard-restarted.flag)) {
     & C:\in\wizard.ps1 -Part install -Setup $s
     & C:\in\test.ps1 -Steps checks,tray,hotkey -Setup $s

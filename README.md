@@ -98,7 +98,7 @@ myTTS isn't code-signed yet: a certificate costs money every year, and an applic
 To make sure your download is the file the release published, compare its SHA-256 with the one listed in the release notes and in `SHA256SUMS.txt`:
 
 ```powershell
-Get-FileHash .\myTTS-setup-1.0.0.exe
+Get-FileHash .\myTTS-setup-1.0.1.exe
 ```
 
 Every release is built from the tagged source code by [GitHub Actions](.github/workflows/release.yml), and you can [build it yourself](#development).
