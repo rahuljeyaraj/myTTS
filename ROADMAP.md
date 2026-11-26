@@ -250,12 +250,27 @@ Notes for later:
 - PowerShell 5.1's `Start-Process -Wait` also waits for child processes, so it hangs after a silent update that restarts the tray app. Scripts and CI should wait on the setup process itself (`$p.WaitForExit()`).
 - The installer is unsigned; M8 explains the SmartScreen warning in the README.
 
-### M8: CI and release pipeline (GitHub Actions)
+### M8: CI and release pipeline (GitHub Actions) (done)
 
-- `ci.yml`: on every push and pull request, run the tests on `windows-latest` with Python 3.10 and 3.13.
-- `release.yml`: on a `v*` tag, run the tests, build the exe, run `--self-test` against a cached model, build the installer, write `SHA256SUMS.txt`, attach the eSpeak NG source of the version `notices.ESPEAK_SOURCE` names (tag `1.52.0` today) and the phonemizer sdist (GPL-3.0, bundled as bytecode), and create a **draft** release with notes from `CHANGELOG.md`. Nothing is published automatically.
-- Pin actions to commit SHAs. Add Dependabot for pip and GitHub Actions.
-- Releases are unsigned at first; Windows SmartScreen will show "Windows protected your PC". The README explains this (More info > Run anyway) and gives the SHA-256. Free signing comes after launch (M11).
+Result (2026-11-26):
+
+- **`.github/workflows/ci.yml`:** on every push to `main`, every pull request and by hand. Two jobs on `windows-latest`: Python 3.10 with the exact versions a release is built with (`packaging/requirements-lock.txt`), and Python 3.13 with the newest versions `requirements.txt` allows plus the pinned PyInstaller (one test imports it), so a breaking upstream release shows up there first. pip is cached. Each job takes 1 to 2 minutes.
+- **`.github/workflows/release.yml`:** on a `v*` tag. The build job (`windows-2025`, Python from `packaging/.python-version`, no pip cache) checks that the tag is `v` + `mytts.__version__`, installs the lock file and runs `pip check` and the tests, restores the voice model from the Actions cache (key from the two SHA-256s; on a miss `python -m mytts download`; always `download --verify`), installs Inno Setup 6.7.3 from its GitHub release after checking a pinned SHA-256, runs `build.ps1 -SelfTest -Installer`, fails if the build changed `THIRD_PARTY_NOTICES.md` (the tagged source must already list what ships), runs `packaging/release.py assets` and uploads `dist/release` as an artifact. A separate `draft` job on `ubuntu-latest` is the only one with `contents: write`; it runs no repository code and calls `gh release create --draft --verify-tag`. Nothing is published automatically. Run by hand, the workflow builds the same files without a tag; with the `draft` input it also makes a draft on a throwaway tag name `test-<run number>` (a draft creates no tag) to delete afterwards.
+- **`packaging/release.py`:** `check-tag`, and `assets`, which writes `assets/` (the installer, `espeak-ng-<version>.tar.gz`, the phonemizer sdist, `SHA256SUMS.txt` in `sha256sum -c` format) and `notes.md`. The eSpeak NG version is read from the bundled DLL and mapped through `notices.ESPEAK_SOURCE`; the source is fetched by tag, the fetched commit must equal the recorded one, and `git archive` packs it (the archive came out byte for byte the same on the runner as on the dev machine). The phonemizer sdist comes from PyPI and is checked against PyPI's SHA-256. The notes are the version's section of `CHANGELOG.md`, then install steps, the SmartScreen explanation (More info > Run anyway), `Get-FileHash` with a table of SHA-256s, and where the source is.
+- **`CHANGELOG.md`** (Keep a Changelog) started, with `Unreleased` and `0.1.0`; M9 polishes it. A test requires a section for the current `__version__`, so a version bump needs its notes.
+- **`packaging/requirements-lock.txt`:** exact pins of the app's dependencies and theirs, the build tools and pytest, as in the dev venv. Tests check that it satisfies `requirements.txt`, `pyproject.toml` and `requirements-build.txt`. `packaging/.python-version` (`3.10.11`) is the release's Python.
+- **Actions pinned to commit SHAs** with a `# vX.Y.Z` comment (checkout 7.0.1, setup-python 7.1.0, cache 6.1.0, upload-artifact 7.0.2, download-artifact 8.0.2); a test checks this, that both workflows default to `contents: read`, and that the release only ever creates drafts. Checkouts don't keep the token (`persist-credentials: false`).
+- **`.github/dependabot.yml`:** weekly, pip in `/packaging` only (the lock and the build pins; `requirements.txt` and `pyproject.toml` keep their ranges), minor and patch updates grouped, and GitHub Actions grouped.
+- README: downloading from the latest release, the SmartScreen warning and `Get-FileHash`, and a Releases section for developers. The notices now say the phonemizer source is attached too.
+- Tests: 133 in total.
+
+How it was tested: CI on the pushed commits (the first run caught the missing PyInstaller on 3.13). Then the Release workflow by hand with `draft` on: everything passed in 3 min 47 s, including a cold model download (354 MB in about 3 s) and the self-test on the runner (no audio devices, Qt's real `windows` platform; first sentence synthesized in 2.0 s). The draft had the four files; they were downloaded through the API and `sha256sum -c SHA256SUMS.txt` passed, and both source archives unpack. The test draft was deleted and left no tag. `release.py assets` was also run on the dev machine against a local build.
+
+Notes for later:
+
+- **Python 3.10 reached end of life in October 2026**, and it holds the release back: numpy 2.3+ and onnxruntime 1.24+ need Python 3.11+, so the lock stays on numpy 2.2.6 and onnxruntime 1.23.2. Dependabot's first pull request (#1) proposed numpy 2.5.5 and onnxruntime 1.32.0 and failed CI on 3.10; `packaging/.python-version` now makes Dependabot skip versions that need a newer Python. #1 is still open with the old proposal: close it, or comment `@dependabot recreate` on it, and the next run proposes only versions that work on 3.10. **Decision for the user before 1.0.0:** move the build to Python 3.13 (supported until 2029). That means a new lock, a rebuilt and re-measured exe, `python313.dll` in the notices, and `install.ps1`'s range checked.
+- The installer is still unsigned; free signing (SignPath) is in M11.
+- Workflow runs on a private repo use Actions minutes (Windows counts double); a release run is about 4 minutes.
 
 ### M9: A professional repo
 

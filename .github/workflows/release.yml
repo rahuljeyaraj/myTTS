@@ -43,7 +43,7 @@ jobs:
       # No pip cache here: a release installs from PyPI.
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.10.11"
+          python-version-file: packaging/.python-version
 
       - name: Check the tag against the version
         if: startsWith(github.ref, 'refs/tags/')

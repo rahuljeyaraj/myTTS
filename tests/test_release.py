@@ -52,6 +52,15 @@ def test_lock_matches_pyproject():
         assert r.specifier.contains(pins[canonicalize_name(r.name)]), dep
 
 
+def test_python_version_file():
+    # The release's Python (setup-python reads it; Dependabot filters the lock's updates by it).
+    version = (ROOT / "packaging" / ".python-version").read_text(encoding="ascii").strip()
+    assert re.fullmatch(r"3\.\d+\.\d+", version)
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    low, high = map(int, re.search(r'requires-python = ">=3\.(\d+),<3\.(\d+)"', text).groups())
+    assert low <= int(version.split(".")[1]) < high
+
+
 def test_check_tag():
     assert release.check_tag(f"v{__version__}") == __version__
     for bad in (__version__, f"v{__version__}.1", "v0.0.0-test"):
