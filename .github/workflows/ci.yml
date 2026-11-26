@@ -2,7 +2,7 @@ name: CI
 
 # The tests, on every push to main and every pull request. Python 3.10 uses the exact versions a
 # release is built with (packaging/requirements-lock.txt); 3.13 uses the newest versions
-# requirements.txt allows, so a breaking upstream release shows up here first.
+# requirements.txt allows (and the pinned PyInstaller), so a breaking upstream release shows up here first.
 
 on:
   push:
@@ -27,9 +27,9 @@ jobs:
       matrix:
         include:
           - python: "3.10"
-            requirements: packaging/requirements-lock.txt
+            requirements: -r packaging/requirements-lock.txt
           - python: "3.13"
-            requirements: requirements.txt
+            requirements: -r requirements.txt -r packaging/requirements-build.txt
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,7 +45,7 @@ jobs:
 
       - name: Install
         run: |
-          python -m pip install --disable-pip-version-check -r ${{ matrix.requirements }} pytest
+          python -m pip install --disable-pip-version-check ${{ matrix.requirements }} pytest
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m pip check
 
