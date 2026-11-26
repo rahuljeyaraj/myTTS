@@ -154,10 +154,11 @@ begin
   DownloadPage.ShowBaseNameInsteadOfUrl := True;
 end;
 
-{ The tasks show what is set now, so unticking one turns it off. }
+{ The tasks show what is set now, so unticking one turns it off. Inno calls this in a silent
+  install too, where it would undo /TASKS: there CurStepChanged keeps what is set instead. }
 procedure CurPageChanged(CurPageID: Integer);
 begin
-  if (CurPageID = wpSelectTasks) and not TasksPageSeen then begin
+  if (CurPageID = wpSelectTasks) and not TasksPageSeen and not WizardSilent then begin
     TasksPageSeen := True;
     if HadStartup then WizardSelectTasks('startup') else WizardSelectTasks('!startup');
     if HadDesktopIcon then WizardSelectTasks('desktopicon') else WizardSelectTasks('!desktopicon');

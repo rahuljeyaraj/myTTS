@@ -12,6 +12,7 @@ import ctypes
 import getpass
 import hashlib
 import json
+import os
 import sys
 import time
 
@@ -20,6 +21,7 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 ERROR_ALREADY_EXISTS = 183
 SYNCHRONIZE = 0x00100000
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 MAX_MESSAGE = 16 << 20  # bytes
 
 
@@ -119,6 +121,48 @@ def is_running(name: str | None = None) -> bool:
     if h:
         k.CloseHandle(h)
     return bool(h)
+
+
+def other_processes(exe: str) -> list[int]:
+    """Process ids of the other processes started from the program file `exe` (Windows only)."""
+    if sys.platform != "win32":
+        return []
+    from ctypes import wintypes
+
+    psapi, k = ctypes.WinDLL("psapi"), ctypes.WinDLL("kernel32")
+    k.OpenProcess.restype = ctypes.c_void_p
+    k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    k.QueryFullProcessImageNameW.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.LPWSTR,
+                                             ctypes.POINTER(wintypes.DWORD)]
+    k.CloseHandle.argtypes = [ctypes.c_void_p]
+    pids = (wintypes.DWORD * 4096)()
+    size = wintypes.DWORD()
+    if not psapi.EnumProcesses(pids, ctypes.sizeof(pids), ctypes.byref(size)):
+        return []
+    want = os.path.normcase(os.path.abspath(exe))
+    found = []
+    for pid in pids[: size.value // ctypes.sizeof(wintypes.DWORD)]:
+        if pid in (0, os.getpid()):
+            continue
+        h = k.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            continue
+        buf, n = ctypes.create_unicode_buffer(32768), wintypes.DWORD(32768)
+        if k.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)) and os.path.normcase(buf.value) == want:
+            found.append(pid)
+        k.CloseHandle(h)
+    return found
+
+
+def wait_for_start(exe: str | None, name: str | None = None, timeout: float = 5.0) -> bool:
+    """True once a copy holds the mutex. A copy of `exe` that has just been started takes it
+    about a second later (Python and Qt load first), so while one exists, wait for it."""
+    deadline = time.monotonic() + timeout
+    while not is_running(name):
+        if not exe or time.monotonic() >= deadline or not other_processes(exe):
+            return is_running(name)
+        time.sleep(0.1)
+    return True
 
 
 def wait_until_gone(name: str | None = None, timeout: float = 10.0) -> bool:

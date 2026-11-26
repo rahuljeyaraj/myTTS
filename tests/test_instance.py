@@ -7,7 +7,7 @@ from pathlib import Path
 
 from conftest import wait_until
 from mytts.ui.app import quit_running
-from mytts.ui.instance import SingleInstance, is_running, send, wait_until_gone
+from mytts.ui.instance import SingleInstance, is_running, other_processes, send, wait_for_start, wait_until_gone
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -96,9 +96,11 @@ def test_is_running_follows_the_first_copy(qapp):
 SERVER = r"""
 import sys
 sys.path.insert(0, sys.argv[2])
+import time
 from PySide6.QtCore import QCoreApplication, QTimer
 from mytts.ui.instance import SingleInstance
 app = QCoreApplication([])
+time.sleep(float(sys.argv[3]) if len(sys.argv) > 3 else 0)  # still starting up
 instance = SingleInstance(sys.argv[1])
 assert instance.acquire()
 instance.message.connect(lambda m: m.get("cmd") == "quit" and QTimer.singleShot(300, app.quit))
@@ -123,3 +125,31 @@ def test_quit_waits_until_the_running_copy_is_gone(qapp, tmp_path):
     finally:
         p.kill()
     assert quit_running(timeout=1, name=name) == 1  # nothing left to quit
+
+
+def test_other_processes_finds_a_copy_of_the_program():
+    p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert p.pid in other_processes(sys.executable)
+        assert p.pid not in other_processes(str(ROOT / "no-such.exe"))
+    finally:
+        p.kill()
+        p.wait(10)
+
+
+def test_wait_for_start_waits_for_a_copy_that_is_starting(qapp, tmp_path):
+    # As after a silent update: setup has just started the app when the uninstaller asks it to quit.
+    name = unique_name()
+    script = tmp_path / "server.py"
+    script.write_text(SERVER, encoding="utf-8")
+    assert not wait_for_start(None, name, timeout=5)  # no copy of the program: no waiting
+    p = subprocess.Popen([sys.executable, str(script), name, str(ROOT), "1.5"], stdout=subprocess.PIPE, text=True)
+    try:
+        start = time.monotonic()
+        assert wait_for_start(sys.executable, name, timeout=15)
+        assert time.monotonic() - start >= 1.0
+        assert p.stdout.readline().strip() == "ready"
+        assert send({"cmd": "quit"}, name)
+        p.wait(10)
+    finally:
+        p.kill()

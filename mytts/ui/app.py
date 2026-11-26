@@ -16,7 +16,7 @@ from pathlib import Path
 from PySide6.QtCore import QByteArray, QObject, Qt, QtMsgType, QTimer, Signal, qInstallMessageHandler
 from PySide6.QtWidgets import QApplication
 
-from .. import DISPLAY_NAME, __version__, autostart, models
+from .. import DISPLAY_NAME, __version__, autostart, models, paths
 from ..capture import capture_selection
 from ..hotkey import GlobalHotkey
 from ..player import Player, State
@@ -25,7 +25,7 @@ from ..settings import HOTKEYS, Settings
 from . import native
 from . import theme as themes
 from .icon import app_icon
-from .instance import SingleInstance, is_running, send, wait_until_gone
+from .instance import SingleInstance, send, wait_for_start, wait_until_gone
 from .reader import ReaderWindow
 from .settings_dialog import SettingsDialog
 from .tray import Tray
@@ -383,7 +383,9 @@ def quit_running(timeout: float = 10.0, name: str | None = None) -> int:
     from PySide6.QtCore import QCoreApplication
 
     _app = QCoreApplication.instance() or QCoreApplication(sys.argv[:1])
-    if not is_running(name):
+    # An uninstaller may ask just after a copy was started (setup restarts it after an update):
+    # wait for that copy of this exe to finish starting, or it keeps running from deleted files.
+    if not wait_for_start(sys.executable if paths.frozen() else None, name):
         print(f"{DISPLAY_NAME} is not running.")
         return 1
     if not send({"cmd": "quit"}, name):
