@@ -1,0 +1,28 @@
+<!-- Copy to build\sandbox and change C:\path\to\myTTS to the checkout. See README.md. -->
+<Configuration>
+  <Networking>Enable</Networking>
+  <AudioInput>Disable</AudioInput>
+  <VideoInput>Disable</VideoInput>
+  <ClipboardRedirection>Disable</ClipboardRedirection>
+  <PrinterRedirection>Disable</PrinterRedirection>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>C:\path\to\myTTS\build\sandbox\in</HostFolder>
+      <SandboxFolder>C:\in</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>C:\path\to\myTTS\build\sandbox\extra</HostFolder>
+      <SandboxFolder>C:\extra</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>C:\path\to\myTTS\build\sandbox\out</HostFolder>
+      <SandboxFolder>C:\out</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\in\agent.ps1</Command>
+  </LogonCommand>
+</Configuration>
