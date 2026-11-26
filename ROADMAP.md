@@ -314,11 +314,12 @@ Result (2026-11-26). **Nothing is public: the repo is private and the release is
 
 Known limits at launch: the installer is unsigned (SmartScreen warning); no Windows on ARM build; 7 languages; the app needs about 1 GB of memory while it runs.
 
-Left for the user: review the draft release, then say "go public" for M11. Still from M9: upload `docs/social-preview.png` by hand (Settings > General > Social preview).
+Left for the user: review the draft release, then say "go public" for M11. The social preview image waits for M11: GitHub hides the Social preview setting on a private repository that never had one.
 
 ### M11: Go public (only when the user says so)
 
 - Make the repo public through the REST API. Publish the draft release. Check the README, release and download from a logged-out browser.
+- The user uploads `docs/social-preview.png` by hand right after the repo is public (Settings > General > Social preview > Edit > Upload an image; there is no API, and the setting only appears on a public repository).
 - Turn on the features that are free for public repos: secret scanning with push protection, Dependabot alerts, private vulnerability reporting. Add a ruleset on `main` that blocks force pushes and deletion.
 - After launch, each step only with the user's go-ahead:
   - A LinkedIn post (draft written for review) with the MP4.
