@@ -4,7 +4,7 @@ All notable changes to myTTS are listed here. The format follows [Keep a Changel
 
 ## [Unreleased]
 
-## [1.0.1] - 2026-11-26
+## [1.0.1] - 2026-11-27
 
 ### Fixed
 

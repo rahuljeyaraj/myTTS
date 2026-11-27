@@ -323,7 +323,7 @@ Known limits at launch: the installer is unsigned (SmartScreen warning); no Wind
 
 What happened next: 1.0.0 was published as it was, and the download retry ships as 1.0.1 (see M11).
 
-### M11: Go public (in progress)
+### M11: Go public (done; post-launch steps wait for the user)
 
 Done on 2026-11-26 (recorded on 2026-11-27, because the session that did it ended before updating this file):
 
@@ -343,10 +343,9 @@ Done on 2026-11-26 (recorded on 2026-11-27, because the session that did it ende
 - **The final 1.0.1 draft:** tag `v1.0.1` moved twice, now on `fe2f63f` (both earlier drafts deleted; none was published). Release workflow green. `myTTS-setup-1.0.1.exe` 44,631,989 bytes, SHA-256 `641a391b322d4b2ece37d5306cda315fda896152c8ca8a945ca2e69714b87557`; `sha256sum -c` passed; the release notes list all three fixes.
 - **The final draft in Sandbox (2026-11-27), 57 checks, none failed:** the published 1.0.0 installed and running, a silent update to 1.0.1 restarts it in the tray; `checks` (Apps entry "myTTS 1.0.1", `--version`, `download --verify`, `--self-test`); tray start 5.4 s; the hotkey plays 2.7 s after the key press and a second press pauses; update while running, uninstall right after it (everything removed, model kept), the tasks step; a fresh install with the real model download (75 s) passes all checks. `tools/sandbox/measure.ps1`: the restarted copy held the mutex 2.5 to 2.8 s after it started (3 updates), and 5 uninstalls right after a silent update left no files and no process. The uninstaller's `quit` step now takes 7.9 to 8.5 s, because it waits until the new copy answers.
 
-Left (each with the user's go-ahead, since the repo is public now):
+- **1.0.1 published** on 2026-11-27 at 08:03 UTC (the user's go-ahead), marked latest; the CHANGELOG date is now 2026-11-27. Logged out: `releases/latest` goes to `v1.0.1`, and the installer downloaded from `releases/latest/download/` matches `SHA256SUMS.txt`.
 
-1. Publish 1.0.1 (change the CHANGELOG date if it is later than 2026-11-26).
-2. The post-launch steps below.
+Left: the post-launch steps below, each only with the user's go-ahead.
 
 The original plan, for reference:
 
