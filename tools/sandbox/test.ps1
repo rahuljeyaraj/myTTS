@@ -26,6 +26,7 @@ public static class W {
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
   public static void Chord(params byte[] keys) {
     foreach (var k in keys) keybd_event(k, 0, 0, UIntPtr.Zero);
     System.Threading.Thread.Sleep(60);
@@ -68,10 +69,15 @@ function Invoke-Setup([string[]]$Arguments, [string]$LogName) {
     $p.ExitCode
 }
 
+$script:LogMark = 0
+function Set-LogMark {  # Wait-Log looks only at lines written after this
+    $script:LogMark = if (Test-Path $AppLog) { @(Get-Content -LiteralPath $AppLog).Count } else { 0 }
+}
+
 function Wait-Log([string]$Pattern, [int]$TimeoutS = 30) {
     $end = (Get-Date).AddSeconds($TimeoutS)
     while ((Get-Date) -lt $end) {
-        if ((Test-Path $AppLog) -and (Select-String -LiteralPath $AppLog -Pattern $Pattern -Quiet)) { return $true }
+        if ((Test-Path $AppLog) -and (Get-Content -LiteralPath $AppLog | Select-Object -Skip $script:LogMark | Select-String -Pattern $Pattern -Quiet)) { return $true }
         Start-Sleep -Milliseconds 250
     }
     $false
@@ -144,6 +150,7 @@ foreach ($step in $Steps) {
         }
         'tray' {
             Stop-App
+            Set-LogMark
             $sw = [Diagnostics.Stopwatch]::StartNew()
             Start-Process $Exe -ArgumentList '--tray'
             Check 'starts in the tray' { Wait-Log 'Started in the tray' 30 }
@@ -161,26 +168,31 @@ foreach ($step in $Steps) {
         'hotkey' {
             # Notepad is not in Sandbox: a plain window with a text box, in its own process.
             $n = Start-Process powershell -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:\in\textwin.ps1' -PassThru
-            $end = (Get-Date).AddSeconds(20)
-            while ((Get-Date) -lt $end) { $n.Refresh(); if ($n.MainWindowHandle -ne [IntPtr]::Zero) { break }; Start-Sleep -Milliseconds 300 }
+            # Find the form by its title: the process's MainWindowHandle can be its PowerShell
+            # console, which shows first, and then Ctrl+A selects nothing.
+            $win = [IntPtr]::Zero
+            $end = (Get-Date).AddSeconds(30)
+            while ($win -eq [IntPtr]::Zero -and (Get-Date) -lt $end) { $win = [W]::FindWindow([NullString]::Value, 'Sample text'); Start-Sleep -Milliseconds 300 }
             Start-Sleep 1
             foreach ($try in 1..10) {
                 # A background process may not take the foreground; an Alt tap lets it (the usual workaround).
                 [W]::Chord($VK.Alt)
-                $null = [W]::SetForegroundWindow($n.MainWindowHandle)
+                $null = [W]::SetForegroundWindow($win)
                 Start-Sleep -Milliseconds 300
-                if ([W]::GetForegroundWindow() -eq $n.MainWindowHandle) { break }
+                if ([W]::GetForegroundWindow() -eq $win) { break }
             }
-            Check 'the text window is in front' { [W]::GetForegroundWindow() -eq $n.MainWindowHandle }
+            Check 'the text window is in front' { $win -ne [IntPtr]::Zero -and [W]::GetForegroundWindow() -eq $win }
             Start-Sleep -Milliseconds 500
             [W]::Chord($VK.Ctrl, $VK.A); Start-Sleep -Milliseconds 400
+            Set-LogMark
             $sw = [Diagnostics.Stopwatch]::StartNew()
             [W]::Chord($VK.Ctrl, $VK.Alt, $VK.Space)
-            Check 'Ctrl+Alt+Space reads the selection' { Wait-Log 'Read selection: \d+ characters' 10 }
+            Check 'Ctrl+Alt+Space reads the selection' { Wait-Log 'Read selection: [1-9]\d* characters' 10 }
             Check 'it plays' { Wait-Log 'Player PLAYING' 15 }
             Say ("playing {0:N1} s after the key press" -f $sw.Elapsed.TotalSeconds)
             Start-Sleep 2; Save-Screen 'reader-playing'
             [W]::Chord($VK.Ctrl, $VK.Alt, $VK.Right); Start-Sleep 1
+            Set-LogMark
             [W]::Chord($VK.Ctrl, $VK.Alt, $VK.Space)
             Check 'pressed again, it pauses' { Wait-Log 'Player PAUSED' 10 }
             Save-Screen 'reader-paused'

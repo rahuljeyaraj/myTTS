@@ -59,6 +59,8 @@ For other checks, dot-source `ui.ps1` in a job. It lists windows and their contr
 - The `hotkey` step and screenshots need the Sandbox window to be drawn: keep it open and don't let your own screen lock.
 - The Sandbox has no Notepad, so `textwin.ps1` shows the sample text and selects it itself.
 - A new Sandbox runs every job in the queue again, so move old jobs out first.
+- Wait for setup with `$p = Start-Process ... -PassThru; $p.WaitForExit()`, not `Start-Process -Wait`: in Windows PowerShell 5.1, `-Wait` also waits for the processes setup starts, and a silent update starts myTTS again, so it never returns.
+- Find a test window by its title (`FindWindow`), not by the process's `MainWindowHandle`: a PowerShell script's console window shows first and can be the one it returns. Pass `[NullString]::Value` for the class name, not `$null` (see the Dev environment notes in ROADMAP.md).
 - The agent starts every job in the queue at once. Put steps that must run in order in one job.
 - A restart inside the Sandbox (`shutdown /r`) keeps its state, and the agent starts again and runs every job in the queue again. Guard jobs that must not run twice with a file in `out` (as above). `wizard.ps1 -Part update` also starts the agent from `RunOnce`, so two agents may run the same job: the lock file stops the second.
 - The setup wizard's buttons say `Next` and `Back` (the modern style has no arrows). A message box or task dialog over the wizard does not disable its buttons for `BM_CLICK`, so look for dialogs (`#32770`) before clicking. Task dialog buttons are not windows: press them with `TDM_CLICK_BUTTON` and the button's ID (for example `IDYES`, `IDRETRY`).
