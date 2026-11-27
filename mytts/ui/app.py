@@ -25,7 +25,7 @@ from ..settings import HOTKEYS, Settings
 from . import native
 from . import theme as themes
 from .icon import app_icon
-from .instance import SingleInstance, send, wait_for_start, wait_until_gone
+from .instance import START_TIMEOUT, SingleInstance, send, wait_for_start, wait_until_gone
 from .reader import ReaderWindow
 from .settings_dialog import SettingsDialog
 from .tray import Tray
@@ -388,7 +388,7 @@ def quit_running(timeout: float = 10.0, name: str | None = None) -> int:
     if not wait_for_start(sys.executable if paths.frozen() else None, name):
         print(f"{DISPLAY_NAME} is not running.")
         return 1
-    if not send({"cmd": "quit"}, name):
+    if not send({"cmd": "quit"}, name, START_TIMEOUT):
         print(f"{DISPLAY_NAME} is running but did not respond.", file=sys.stderr)
         return 1
     if not wait_until_gone(name, timeout):

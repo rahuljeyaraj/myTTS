@@ -154,7 +154,10 @@ def other_processes(exe: str) -> list[int]:
     return found
 
 
-def wait_for_start(exe: str | None, name: str | None = None, timeout: float = 30.0) -> bool:
+START_TIMEOUT = 30.0  # for a copy that is still starting (see wait_for_start and send)
+
+
+def wait_for_start(exe: str | None, name: str | None = None, timeout: float = START_TIMEOUT) -> bool:
     """True once a copy holds the mutex. A copy of `exe` that has just been started takes it
     a few seconds later (Python and Qt load first), so while one exists, wait for it. Right
     after a silent update, when every file is new, that took up to 5 s in Windows Sandbox,
@@ -178,7 +181,10 @@ def wait_until_gone(name: str | None = None, timeout: float = 10.0) -> bool:
 
 
 def send(message: dict, name: str | None = None, timeout: float = 3.0) -> bool:
-    """Deliver `message` to the running copy. Retries while it is still starting up."""
+    """Deliver `message` to the running copy and wait for its reply, `timeout` s in all (at
+    least 2 s for the reply). A copy that is still starting takes the connection before its
+    event loop runs, so it may answer only seconds later: in Windows Sandbox, right after a
+    silent update, a 2 s wait gave up on it and the uninstaller deleted the files under it."""
     name = name or default_name()
     payload = json.dumps(message).encode("utf-8") + b"\n"
     deadline = time.monotonic() + timeout
@@ -189,7 +195,11 @@ def send(message: dict, name: str | None = None, timeout: float = 3.0) -> bool:
             sock.write(payload)
             sock.flush()
             reply = b""
-            while b"\n" not in reply and sock.waitForReadyRead(2000):
+            reply_deadline = max(deadline, time.monotonic() + 2.0)
+            while b"\n" not in reply:
+                left = reply_deadline - time.monotonic()
+                if left <= 0 or not sock.waitForReadyRead(max(1, int(left * 1000))):
+                    break
                 reply += bytes(sock.readAll().data())
             sock.abort()
             return reply.startswith(b"ok")

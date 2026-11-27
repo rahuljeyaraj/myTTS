@@ -107,6 +107,7 @@ assert instance.acquire()
 instance.message.connect(lambda m: m.get("cmd") == "quit" and QTimer.singleShot(300, app.quit))
 app.aboutToQuit.connect(instance.release)
 print("ready", flush=True)
+time.sleep(float(sys.argv[4]) if len(sys.argv) > 4 else 0)  # holds the mutex, no event loop yet
 app.exec()
 """
 
@@ -126,6 +127,23 @@ def test_quit_waits_until_the_running_copy_is_gone(qapp, tmp_path):
     finally:
         p.kill()
     assert quit_running(timeout=1, name=name) == 1  # nothing left to quit
+
+
+def test_quit_waits_for_a_copy_that_has_the_mutex_but_no_event_loop_yet(qapp, tmp_path):
+    # Found in Windows Sandbox: right after a silent update the new copy took the mutex, then
+    # needed seconds more to answer; quit gave up after 2 s and the uninstaller went on.
+    name = unique_name()
+    script = tmp_path / "server.py"
+    script.write_text(SERVER, encoding="utf-8")
+    p = subprocess.Popen([sys.executable, str(script), name, str(ROOT), "0", "4"], stdout=subprocess.PIPE, text=True)
+    try:
+        assert p.stdout.readline().strip() == "ready"
+        start = time.monotonic()
+        assert quit_running(timeout=10, name=name) == 0
+        assert time.monotonic() - start >= 3.0
+        p.wait(10)
+    finally:
+        p.kill()
 
 
 def test_other_processes_finds_a_copy_of_the_program():
