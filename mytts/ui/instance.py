@@ -154,9 +154,11 @@ def other_processes(exe: str) -> list[int]:
     return found
 
 
-def wait_for_start(exe: str | None, name: str | None = None, timeout: float = 5.0) -> bool:
+def wait_for_start(exe: str | None, name: str | None = None, timeout: float = 30.0) -> bool:
     """True once a copy holds the mutex. A copy of `exe` that has just been started takes it
-    about a second later (Python and Qt load first), so while one exists, wait for it."""
+    a few seconds later (Python and Qt load first), so while one exists, wait for it. Right
+    after a silent update, when every file is new, that took up to 5 s in Windows Sandbox,
+    hence the long timeout: it only runs out if a copy never finishes starting."""
     deadline = time.monotonic() + timeout
     while not is_running(name):
         if not exe or time.monotonic() >= deadline or not other_processes(exe):

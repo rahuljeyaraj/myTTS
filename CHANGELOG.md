@@ -10,6 +10,7 @@ All notable changes to myTTS are listed here. The format follows [Keep a Changel
 
 - Setup tries a failed voice model download twice more by itself, with a short countdown, before it asks what to do. Silent installs (such as winget) retry too, and files that already arrived are not downloaded again.
 - When the download still fails, setup says what went wrong in plain words instead of an "Internal error: Worker thread terminated" message.
+- Uninstalling right after a silent update (which starts myTTS again) could leave myTTS running from deleted files when it took more than a few seconds to start. The uninstaller now waits up to 30 s for it.
 
 ## [1.0.0] - 2026-11-26
 

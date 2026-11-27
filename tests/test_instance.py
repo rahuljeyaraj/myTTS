@@ -1,3 +1,4 @@
+import inspect
 import json
 import subprocess
 import sys
@@ -135,6 +136,12 @@ def test_other_processes_finds_a_copy_of_the_program():
     finally:
         p.kill()
         p.wait(10)
+
+
+def test_wait_for_start_default_allows_a_slow_start():
+    # After a silent update the new copy took up to 5 s to take the mutex (Windows Sandbox);
+    # with a 5 s wait, an uninstall right after the update deleted the files under it.
+    assert inspect.signature(wait_for_start).parameters["timeout"].default >= 20
 
 
 def test_wait_for_start_waits_for_a_copy_that_is_starting(qapp, tmp_path):
