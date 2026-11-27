@@ -355,7 +355,7 @@ The original plan, for reference:
 - The user uploads `docs/social-preview.png` by hand right after the repo is public (Settings > General > Social preview > Edit > Upload an image; there is no API, and the setting only appears on a public repository).
 - Turn on the features that are free for public repos: secret scanning with push protection, Dependabot alerts, private vulnerability reporting. Add a ruleset on `main` that blocks force pushes and deletion.
 - After launch, each step only with the user's go-ahead:
-  - A LinkedIn post (draft written for review) with the MP4.
+  - A LinkedIn post (draft written for review) with the MP4. **Done 2026-11-27:** a video post with `docs/demo.mp4` (sound on); Nick Otmazgin tagged; the first comment has the repo link first (so the preview card shows the social preview image), the direct installer link `releases/latest/download/myTTS-setup-1.0.1.exe`, the SmartScreen note and links to FluentVoice Pro and Read Aloud. A link that names the version keeps serving 1.0.1 after a newer release; fine for a post.
   - Posts on Show HN and Reddit (r/software, r/windows, r/opensource).
   - A winget manifest pull request to `microsoft/winget-pkgs`, so `winget install mytts` works.
   - An application to the SignPath Foundation for free code signing for open source projects, to remove the SmartScreen warning.
