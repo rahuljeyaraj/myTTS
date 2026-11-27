@@ -5,7 +5,7 @@ Tests a release installer on a fresh Windows with no Python and no Visual C++ ru
 ## Set up
 
 1. Make `build\sandbox\in`, `build\sandbox\in\queue`, `build\sandbox\out` and `build\sandbox\extra` (`build` is ignored by git).
-2. Copy `agent.ps1`, `test.ps1`, `wizard.ps1`, `retry.ps1`, `ui.ps1` and `textwin.ps1` to `build\sandbox\in`.
+2. Copy `agent.ps1`, `test.ps1`, `wizard.ps1`, `retry.ps1`, `measure.ps1`, `ui.ps1` and `textwin.ps1` to `build\sandbox\in`.
 3. Put the release files (the installer and `SHA256SUMS.txt`) in a folder under `in`, for example `in\draft`.
 4. Copy `mytts.wsb` to `build\sandbox` and replace `C:\path\to\myTTS` with the checkout's folder.
 
@@ -50,6 +50,8 @@ Copy-Item $env:LOCALAPPDATA\mytts\models\* build\sandbox\in\retry\models
 ```
 
 It runs three scenarios (`-Scenarios once, always, wizard`): a silent install where one download is cut off once, a silent install where it always is, and the wizard, where it checks the countdown and the dialog and then presses "Try again". Results go to `out\retry-<time>.txt`.
+
+`measure.ps1 -Setup <installer>` checks the race between a silent update and an uninstall: it times how long the copy that setup starts again takes to hold the mutex (3 updates), then uninstalls right after a silent update 5 times and reports any files or processes left. The uninstall logs go to `out\unins-<n>.log`, where the `quit` step's start and end show how long the uninstaller waited.
 
 For other checks, dot-source `ui.ps1` in a job. It lists windows and their controls, clicks buttons by their text and saves screenshots to `out`.
 
