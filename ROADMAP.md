@@ -294,7 +294,7 @@ Left for the user:
 - **Code of Conduct contact:** reports go through the private vulnerability reporting form, which M11 turns on. To use an email address instead, replace that sentence in `CODE_OF_CONDUCT.md`.
 - Still open from M8: the Python 3.13 decision before 1.0.0. Dependabot #1 is closed; #2 (a pip group update) is open.
 
-### M10: Pre-launch review (done; waiting for the user)
+### M10: Pre-launch review (done)
 
 Result (2026-11-26). **Nothing is public: the repo is private and the release is a draft.**
 
@@ -321,9 +321,33 @@ Result (2026-11-26). **Nothing is public: the repo is private and the release is
 
 Known limits at launch: the installer is unsigned (SmartScreen warning); no Windows on ARM build; 7 languages; the app needs about 1 GB of memory while it runs.
 
-Left for the user: decide whether setup should retry a failed model download by itself (once or twice, before the dialog, and in silent installs too) and show a plainer message. That changes the installer, so the draft release would be rebuilt (the tag moves again; nothing is public). Then review the draft release and say "go public" for M11. The social preview image waits for M11: GitHub hides the Social preview setting on a private repository that never had one.
+What happened next: 1.0.0 was published as it was, and the download retry ships as 1.0.1 (see M11).
 
-### M11: Go public (only when the user says so)
+### M11: Go public (in progress)
+
+Done on 2026-11-26 (recorded on 2026-11-27, because the session that did it ended before updating this file):
+
+- **Public:** the repo is public and renamed `myTTS` (the old `mytts` URLs redirect, and `origin` points at the new name), with a description, 8 topics and the latest release as its homepage. **1.0.0 published** at 11:26 UTC (tag `v1.0.0` on `7436b3b`). Logged out: the repo page, `releases/latest` and the installer download all return 200. Downloads by 2026-11-27: installer 3, `SHA256SUMS.txt` 3, each source archive 2.
+- **Security:** secret scanning with push protection, Dependabot alerts and private vulnerability reporting are on. The ruleset "Protect main" (the default branch, no bypass) blocks deletion and force pushes. Dependabot security updates (automatic PRs) are off; they were not part of the plan.
+- **Not done:** the social preview image (`usesCustomOpenGraphImage` is still false); the user uploads it by hand.
+
+**1.0.1, the voice model download retry** (the user's answer to M10):
+
+- Setup tries a failed download twice more, after 3 s and then 6 s, with a countdown on the download page; silent installs retry too; files that already arrived are not fetched again; the dialog after the last try says what went wrong in plain words, with Inno's text under Details (`d8f8708`). `tools/sandbox/retry.ps1` serves the model from a local server that cuts off the downloads it is told to; all four scenarios pass in Sandbox: cut once (silent), always (silent; installs without the model), the wizard (countdown, plain dialog, "Try again" downloads), and Stop during the countdown.
+- Version 1.0.1 (`3d3fe77`). Its first release run failed because `THIRD_PARTY_NOTICES.md` still named 1.0.0; a test now checks that line (`66b5200`). The draft "myTTS 1.0.1" from `66b5200`: `myTTS-setup-1.0.1.exe` 44,626,532 bytes, SHA-256 `2c4df263a2387877159a55c0c95f36c85f3bab1d778520daadfc18e02dbd09f0`; downloaded through the API, `sha256sum -c` passed.
+- **The draft in Sandbox (2026-11-27):** the published 1.0.0 installed and running, then a silent update to 1.0.1 restarts it in the tray; all `checks` pass (Apps entry "myTTS 1.0.1", `--version`, `download --verify`, `--self-test`); the hotkey reads 124 characters and plays 2.1 s after the key press, and a second press pauses; the tasks step passes; a fresh install with the real model download takes 57 s and passes all checks.
+- **Found: an uninstall right after a silent update** left `myTTS.exe` and the logs folder behind in 1 of 2 runs: the M10 fix had too little margin. Measured in Sandbox: after a silent update, the restarted copy takes the mutex 1.7, 2.5 and 5.0 s after it starts, and `quit` waited at most 5 s for it (the whole `quit` step took 5.3 to 5.8 s in the uninstall logs). `wait_for_start` now waits up to 30 s; it only waits while a copy of the exe exists that does not hold the mutex yet. 160 tests pass (1 skipped). **The 1.0.1 draft does not have this fix yet.**
+- Sandbox harness fixes: `test.ps1` finds the text window by its title (the PowerShell console that shows first was taken for it, so Ctrl+A selected nothing); `Wait-Log` only looks at lines written after a mark (a stale "Started in the tray" line gave "started in 0.0 s"); "reads the selection" needs at least 1 character. The README lists the pitfalls (`Start-Process -Wait` also waits for the app setup starts).
+
+Left (each with the user's go-ahead, since the repo is public now):
+
+1. Rebuild the 1.0.1 draft with the fix: delete the draft, move the tag `v1.0.1` to the fix commit (a force push of a public tag; the draft was never published and nobody downloaded it), and let the Release workflow make a new draft. Then run the Sandbox upgrade test and the uninstall-after-update check on it again.
+2. Publish 1.0.1 (change the CHANGELOG date if it is later than 2026-11-26).
+3. The user uploads the social preview image.
+
+The original plan, for reference:
+
+- Make the repo public through the REST API. Publish the draft release. Check the README, release and download from a logged-out browser.
 
 - Make the repo public through the REST API. Publish the draft release. Check the README, release and download from a logged-out browser.
 - The user uploads `docs/social-preview.png` by hand right after the repo is public (Settings > General > Social preview > Edit > Upload an image; there is no API, and the setting only appears on a public repository).
